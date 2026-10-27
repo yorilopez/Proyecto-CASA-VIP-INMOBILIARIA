@@ -1,0 +1,40 @@
+name: CASA VIP Android
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build apk --debug --target-platform android-arm64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: CASA-VIP-Android-arm64
+          path: mobile/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 30
+          if-no-files-found: error

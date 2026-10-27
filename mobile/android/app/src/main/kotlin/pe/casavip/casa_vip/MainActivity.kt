@@ -7,6 +7,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.io.ByteArrayOutputStream
 
 /** Selector del sistema sin permisos de almacenamiento y compartición con URI privada. */
 class MainActivity: FlutterActivity() {
@@ -39,6 +40,6 @@ class MainActivity: FlutterActivity() {
   if(requestCode!=910)return
   val result=pending;pending=null
   if(resultCode!=Activity.RESULT_OK||data?.data==null){result?.success(null);return}
-  try {val uri=data.data!!;val bytes=contentResolver.openInputStream(uri)!!.use{it.readNBytes(5*1024*1024+1)};if(bytes.size>5*1024*1024){result?.error("SIZE","La imagen supera 5 MB.",null);return};result?.success(mapOf("bytes" to bytes,"name" to "documento"))}catch(e:Exception){result?.error("FILE","No se pudo leer la fotografía.",null)}
+  try {val uri=data.data!!;val bytes=contentResolver.openInputStream(uri)!!.use{input -> val out=ByteArrayOutputStream();val buffer=ByteArray(8192);while(out.size()<=5*1024*1024){val count=input.read(buffer);if(count<0)break;out.write(buffer,0,count)};out.toByteArray()};if(bytes.size>5*1024*1024){result?.error("SIZE","La imagen supera 5 MB.",null);return};result?.success(mapOf("bytes" to bytes,"name" to "documento"))}catch(e:Exception){result?.error("FILE","No se pudo leer la fotografía.",null)}
  }
 }
