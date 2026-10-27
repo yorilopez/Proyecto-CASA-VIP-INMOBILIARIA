@@ -63,7 +63,7 @@ En el emulador, la API predeterminada es http://10.0.2.2:8080. En un teléfono s
 
 ## Verificación reproducible
 
-En backend: mvn test. Para repetir la suite con PostgreSQL, preparar una base de pruebas aislada, aplicar los dos SQL y ejecutar con las variables DB_URL, DB_USER, DB_PASSWORD y el perfil postgres. No usar una base real de la empresa.
+En backend: mvn test. Para repetir la suite con PostgreSQL, preparar una base de pruebas aislada y aplicar los dos SQL. Ejecutar mvn test con los parámetros -Dspring.datasource.url=jdbc:postgresql://host:puerto/base_pruebas, -Dspring.datasource.username=usuario_pruebas, -Dspring.datasource.password=clave y -Dspring.sql.init.mode=never. La suite utiliza el perfil test y limpia sus tablas antes de cada caso. No usar una base real de la empresa.
 
 En mobile: flutter test y flutter analyze. Los resultados archivados incluyen las fases roja y verde de TDD. La evidencia de navegador muestra la creación de una separación mediante la API real.
 
