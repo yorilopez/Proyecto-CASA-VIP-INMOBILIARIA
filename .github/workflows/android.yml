@@ -5,6 +5,7 @@ on:
     paths:
       - 'mobile/**'
       - '.github/workflows/android.yml'
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
