@@ -37,6 +37,7 @@ class ApiIntegrationTest {
     jdbc.update("delete from separacion");
     jdbc.update("delete from cliente");
     jdbc.update("delete from sesion");
+    jdbc.update("delete from usuario where correo='otro@casavip.pe'");
     jdbc.update("update lote set estado='DISPONIBLE' where id>=3");
   }
 
