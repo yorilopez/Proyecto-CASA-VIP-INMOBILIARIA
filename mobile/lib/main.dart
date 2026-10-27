@@ -304,6 +304,7 @@ class _CasaViewState extends State<CasaView> {
     TextEditingController controller, {
     bool required = false,
     bool obscure = false,
+    bool compact = false,
     String? icon,
     String? hint,
     TextInputType? keyboard,
@@ -327,13 +328,18 @@ class _CasaViewState extends State<CasaView> {
           obscureText: obscure,
           maxLines: lines,
           keyboardType: keyboard,
-          style: const TextStyle(fontSize: 14.4, color: ink),
+          style: const TextStyle(fontSize: 14.4, height: 1.2, color: ink),
           autofillHints: label == 'Correo corporativo'
               ? [AutofillHints.username]
               : label == 'Contraseña'
               ? [AutofillHints.password]
               : null,
           decoration: InputDecoration(
+            constraints: BoxConstraints(minHeight: compact ? 41 : 44),
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: compact ? 10 : 12,
+            ),
             hintText: hint,
             hintStyle: const TextStyle(color: Color(0xff8a867d), fontSize: 14),
             prefixIcon: icon == null
@@ -1751,7 +1757,7 @@ class _CasaViewState extends State<CasaView> {
                           'Lote $lotCode',
                           size: 28,
                           color: Colors.white,
-                          height: 1.15,
+                          height: 1.5,
                         ),
                       ],
                     ),
@@ -2322,7 +2328,7 @@ class _CasaViewState extends State<CasaView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        field('Nombres y apellidos', n, required: true),
+        field('Nombres y apellidos', n, compact: true, required: true),
         space(12),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2331,6 +2337,7 @@ class _CasaViewState extends State<CasaView> {
               child: field(
                 'DNI',
                 d,
+                compact: true,
                 keyboard: TextInputType.number,
                 validate: dniValidator,
               ),
@@ -2340,6 +2347,7 @@ class _CasaViewState extends State<CasaView> {
               child: field(
                 'Teléfono',
                 p,
+                compact: true,
                 keyboard: TextInputType.phone,
                 validate: phoneValidator,
               ),
@@ -2347,16 +2355,17 @@ class _CasaViewState extends State<CasaView> {
           ],
         ),
         space(12),
-        field('Dirección', a),
+        field('Dirección', a, compact: true),
         space(12),
         field(
           'Correo',
           m,
+          compact: true,
           keyboard: TextInputType.emailAddress,
           validate: mailValidator,
         ),
         space(12),
-        field('Ocupación', o),
+        field('Ocupación', o, compact: true),
       ],
     );
   }
