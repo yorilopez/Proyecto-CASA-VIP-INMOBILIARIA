@@ -397,14 +397,14 @@ class _CasaViewState extends State<CasaView> {
                     size: 16.32,
                     color: Colors.white,
                     weight: FontWeight.w700,
-                    height: 1.25,
+                    height: 1.5,
                   ),
                   space(2),
                   tx(
                     subtitle,
                     size: 12.48,
                     color: const Color(0xffb9b6ae),
-                    height: 1.2,
+                    height: 1.5,
                   ),
                 ],
               ),
@@ -747,7 +747,7 @@ class _CasaViewState extends State<CasaView> {
                 children: [
                   eyebrow('ACCESO DE ASESOR'),
                   space(4),
-                  tx('Bienvenido', size: 28, height: 1.2, spacing: -1.1),
+                  tx('Bienvenido', size: 28, height: 1.5, spacing: -1.1),
                   space(7),
                   tx(
                     'Ingresa para consultar precios, clientes y disponibilidad.',
@@ -857,19 +857,25 @@ class _CasaViewState extends State<CasaView> {
                         children: [
                           eyebrow(dateHeading, golden: true),
                           space(7),
-                          tx(
-                            '¿Qué deseas gestionar hoy?',
-                            size: 23.68,
-                            height: 1.12,
-                            color: Colors.white,
-                            spacing: -.8,
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 260),
+                            child: tx(
+                              '¿Qué deseas gestionar hoy?',
+                              size: 23.68,
+                              height: 1.12,
+                              color: Colors.white,
+                              spacing: -.8,
+                            ),
                           ),
                           space(7),
-                          tx(
-                            'Consulta información vigente antes de atender a tu cliente.',
-                            size: 13.12,
-                            color: const Color(0xffbdbab2),
-                            height: 1.4,
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 250),
+                            child: tx(
+                              'Consulta información vigente antes de atender a tu cliente.',
+                              size: 13.12,
+                              color: const Color(0xffbdbab2),
+                              height: 1.4,
+                            ),
                           ),
                         ],
                       ),

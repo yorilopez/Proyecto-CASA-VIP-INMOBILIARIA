@@ -36,7 +36,7 @@ Widget tx(
   double size = 14,
   Color color = ink,
   FontWeight weight = FontWeight.w400,
-  double height = 1.35,
+  double height = 1.5,
   TextAlign? align,
   int? maxLines,
   double? spacing,
@@ -103,6 +103,7 @@ Widget brand({bool compact = false}) => ClipRRect(
 Widget eyebrow(String t, {bool golden = false}) => tx(
   t,
   size: 10.72,
+  height: 1.35,
   color: golden ? const Color(0xffe8bf53) : const Color(0xff817d73),
   weight: FontWeight.w800,
   spacing: 1.28,
@@ -123,7 +124,7 @@ Widget sectionTitle(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (overline != null) ...[eyebrow(overline), space(3)],
-            tx(title, size: 16.8, height: 1.25),
+            tx(title, size: 16.8, height: 1.5),
           ],
         ),
       ),
