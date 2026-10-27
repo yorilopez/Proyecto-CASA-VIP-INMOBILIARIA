@@ -33,7 +33,7 @@ Cuentas de demostración, contraseña común CasaVIP-demo-2026!:
 | Responsable comercial | responsable@casavip.pe |
 | Administrador | admin@casavip.pe |
 
-La base H2 se guarda en data/ y las imágenes privadas en private-files/, dentro de la carpeta de ejecución. Las cuentas y los clientes son ficticios. La aplicación escucha en la interfaz local de manera predeterminada. No usar estas credenciales en un entorno compartido.
+La base H2 se guarda en data/ con escritura inmediata (WRITE_DELAY=0), y las imágenes privadas en private-files/, dentro de la carpeta de ejecución. Las cuentas y los clientes son ficticios. La aplicación escucha en la interfaz local de manera predeterminada. No usar estas credenciales en un entorno compartido.
 
 ## Construir desde fuentes
 
