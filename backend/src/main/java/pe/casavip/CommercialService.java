@@ -12,10 +12,12 @@ import pe.casavip.ApiModels.*;
 @Service
 public class CommercialService {
   private final CommercialDao dao;
+  private final PrototypeDao prototype;
   private static final Logger log = LoggerFactory.getLogger(CommercialService.class);
 
-  public CommercialService(CommercialDao dao) {
+  public CommercialService(CommercialDao dao, PrototypeDao prototype) {
     this.dao = dao;
+    this.prototype = prototype;
   }
 
   public static long id(Map<String, Object> r, String key) {
@@ -30,14 +32,68 @@ public class CommercialService {
   }
 
   @Transactional
-  public Map<String, Object> addClient(Client input, Actor a) {
+  public Map<String, Object> addClient(Client input, Actor actor) {
+    return attachCo(savePerson(input, actor), input, actor);
+  }
+
+  @Transactional
+  public Map<String, Object> updateClient(long id, Client input, Actor actor) {
+    var prior = client(id, actor);
+    if (id(prior, "proyecto_id") != input.proyecto_id())
+      throw new IllegalArgumentException("Conserva el proyecto del cliente.");
+    String number = BusinessRules.document(input.numero_documento());
+    if ("DNI".equals(input.tipo_documento()) && !number.matches("[0-9]{8}"))
+      throw new IllegalArgumentException("El DNI debe contener 8 digitos.");
+    var clean =
+        new Client(
+            BusinessRules.text(input.nombre(), 160),
+            input.tipo_documento(),
+            number,
+            input.telefono(),
+            input.correo(),
+            input.proyecto_id(),
+            optional(input.direccion()),
+            optional(input.ocupacion()),
+            input.cotitular());
+    prototype.person(id, clean);
+    return attachCo(dao.client(id), clean, actor);
+  }
+
+  private Map<String, Object> attachCo(Map<String, Object> primary, Client input, Actor actor) {
+    if (input.cotitular() != null) {
+      var co = input.cotitular();
+      var secondary =
+          savePerson(
+              new Client(
+                  co.nombre(),
+                  co.tipo_documento(),
+                  co.numero_documento(),
+                  co.telefono(),
+                  co.correo(),
+                  input.proyecto_id(),
+                  co.direccion(),
+                  co.ocupacion(),
+                  null),
+              actor);
+      long titular = id(primary, "id"), cotitular = id(secondary, "id");
+      if (titular == cotitular)
+        throw new IllegalArgumentException("El cotitular debe ser una persona diferente.");
+      if (id(secondary, "proyecto_id") != input.proyecto_id())
+        throw new IllegalArgumentException("El cotitular debe pertenecer al mismo proyecto.");
+      prototype.link(titular, cotitular);
+      primary.put("cotitular", secondary);
+    }
+    return primary;
+  }
+
+  private Map<String, Object> savePerson(Client input, Actor actor) {
     String type = BusinessRules.text(input.tipo_documento(), 20),
         number = BusinessRules.document(input.numero_documento());
     if (type.equals("DNI") && !number.matches("[0-9]{8}"))
       throw new IllegalArgumentException("El DNI debe contener 8 digitos.");
     var prior = dao.clientByDocument(type, number);
-    if (prior != null) return client(id(prior, "id"), a);
-    var c =
+    if (prior != null) return client(id(prior, "id"), actor);
+    var clean =
         new Client(
             BusinessRules.text(input.nombre(), 160),
             type,
@@ -45,9 +101,33 @@ public class CommercialService {
             input.telefono(),
             input.correo(),
             input.proyecto_id());
-    long id = dao.clientAdd(c, a);
-    log.info("cliente_creado id={} actor={}", id, a.id());
+    long id = dao.clientAdd(clean, actor);
+    prototype.profile(id, optional(input.direccion()), optional(input.ocupacion()));
+    log.info("cliente_creado id={} actor={}", id, actor.id());
     return dao.client(id);
+  }
+
+  private static String optional(String text) {
+    return text == null ? null : org.apache.commons.lang3.StringUtils.normalizeSpace(text);
+  }
+
+  public Map<String, Object> clientProfile(long id, Actor actor) {
+    var primary = client(id, actor);
+    var co = prototype.coClient(id);
+    if (co != null) {
+      client(id(co, "id"), actor);
+      primary.put("cotitular", co);
+    }
+    return primary;
+  }
+
+  private Map<String, Object> selectedPlan(Map<String, Object> lot, Long requested) {
+    var plans = (List<Map<String, Object>>) lot.get("planes");
+    if (requested == null) return plans.isEmpty() ? null : plans.getLast();
+    return plans.stream()
+        .filter(p -> id(p, "id") == requested)
+        .findFirst()
+        .orElseThrow(() -> new IllegalArgumentException("Selecciona un plan vigente del lote."));
   }
 
   @Transactional
@@ -56,7 +136,20 @@ public class CommercialService {
     BusinessRules.requireAvailable((String) lot.get("estado"));
     client(in.cliente_id(), a);
     BusinessRules.amount(in.monto(), (BigDecimal) lot.get("precio"));
+    var plan = selectedPlan(lot, in.plan_id());
+    if (in.cotitular_id() != null) {
+      client(in.cotitular_id(), a);
+      if (!prototype.linked(in.cliente_id(), in.cotitular_id()))
+        throw new IllegalArgumentException("El cotitular no esta vinculado al titular.");
+      for (long person : new long[] {in.cliente_id(), in.cotitular_id()}) {
+        var sides = dao.documents(person).stream().map(d -> d.get("lado")).toList();
+        if (!sides.containsAll(List.of("ANVERSO", "REVERSO")))
+          throw new IllegalArgumentException(
+              "Completa ambas caras del DNI del titular y cotitular.");
+      }
+    }
     long id = dao.reserve(in.lote_id(), in.cliente_id(), a.id(), in.monto(), in.observacion());
+    prototype.terms(id, lot, plan, in.cotitular_id());
     dao.lotState(in.lote_id(), "RESERVADO");
     dao.history(in.lote_id(), a.id(), id, "DISPONIBLE", "RESERVADO", "Separacion registrada");
     log.info("separacion_creada id={} lote={} actor={}", id, in.lote_id(), a.id());
@@ -102,6 +195,11 @@ public class CommercialService {
     BusinessRules.amount((BigDecimal) r.get("monto"), (BigDecimal) next.get("precio"));
     String reason = BusinessRules.text(input.motivo(), 180);
     dao.reservationMove(id, input.lote_id());
+    prototype.terms(
+        id,
+        next,
+        selectedPlan(next, null),
+        r.get("cotitular_id") == null ? null : ((Number) r.get("cotitular_id")).longValue());
     dao.lotState(previous, "DISPONIBLE");
     dao.lotState(input.lote_id(), "RESERVADO");
     dao.history(previous, a.id(), id, "RESERVADO", "DISPONIBLE", reason);

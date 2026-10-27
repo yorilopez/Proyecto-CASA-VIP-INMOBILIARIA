@@ -3,22 +3,31 @@ import 'api.dart';
 
 typedef Row = Map<String, dynamic>;
 
-/// Coordina navegación y casos de uso. La vista no conoce SQL ni credenciales de BD.
+/// Coordina el flujo del prototipo con datos devueltos por la API.
 class CasaController extends ChangeNotifier {
   final ApiClient api;
   CasaController(this.api);
   String screen = 'login';
-  Row? user, project, block, lot, selectedClient, result;
+  Row? user,
+      project,
+      block,
+      lot,
+      selectedClient,
+      result,
+      selectedPlan,
+      coClient;
   List<Row> projects = [],
       blocks = [],
       lots = [],
       clients = [],
       reservations = [],
-      documents = [];
+      documents = [],
+      coDocuments = [],
+      stages = [];
   bool get manager => user?['role'] != 'ASESOR';
   bool get admin => user?['role'] == 'ADMINISTRADOR';
-  static List<Row> rows(dynamic data) =>
-      (data as List).map((x) => Map<String, dynamic>.from(x)).toList();
+  static List<Row> rows(dynamic d) =>
+      (d as List).map((x) => Map<String, dynamic>.from(x)).toList();
   Future<void> login(String email, String password) async {
     final data = await api.call('POST', '/auth/login', {
       'email': email,
@@ -27,8 +36,7 @@ class CasaController extends ChangeNotifier {
     api.token = data['token'];
     user = Map<String, dynamic>.from(data['user']);
     await refresh();
-    screen = 'home';
-    notifyListeners();
+    go('home');
   }
 
   Future<void> refresh() async {
@@ -52,25 +60,30 @@ class CasaController extends ChangeNotifier {
     block = null;
     lot = null;
     selectedClient = null;
+    result = null;
+    selectedPlan = null;
+    coClient = null;
     projects = [];
     blocks = [];
     lots = [];
     clients = [];
     reservations = [];
     documents = [];
-    result = null;
+    coDocuments = [];
+    stages = [];
     screen = 'login';
     notifyListeners();
   }
 
-  void go(String page) {
-    screen = page;
+  void go(String s) {
+    screen = s;
     notifyListeners();
   }
 
   Future<void> selectProject(Row p) async {
     project = p;
     blocks = rows(await api.call('GET', '/projects/${p['id']}/blocks'));
+    stages = rows(await api.call('GET', '/projects/${p['id']}/stages'));
     go('blocks');
   }
 
@@ -82,27 +95,54 @@ class CasaController extends ChangeNotifier {
 
   Future<void> selectLot(Row l) async {
     lot = Map<String, dynamic>.from(await api.call('GET', '/lots/${l['id']}'));
+    final p = rows(lot!['planes']);
+    selectedPlan = p.isEmpty ? null : p.last;
     go('lot-detail');
   }
 
   Future<void> saveClient(Row input) async {
     selectedClient = Map<String, dynamic>.from(
-      await api.call('POST', '/clients', input),
+      await api.call(
+        selectedClient != null &&
+                selectedClient!['numero_documento'] == input['numero_documento']
+            ? 'PUT'
+            : 'POST',
+        selectedClient != null &&
+                selectedClient!['numero_documento'] == input['numero_documento']
+            ? '/clients/${selectedClient!['id']}'
+            : '/clients',
+        input,
+      ),
     );
+    coClient = selectedClient!['cotitular'] == null
+        ? null
+        : Map<String, dynamic>.from(selectedClient!['cotitular']);
     await refresh();
     if (lot == null) {
       go('clients');
     } else {
-      documents = rows(
-        await api.call('GET', '/clients/${selectedClient!['id']}/documents'),
-      );
+      await loadDocuments();
       go('documents');
     }
   }
 
-  Future<void> chooseClient(Row c) async {
-    selectedClient = c;
-    documents = rows(await api.call('GET', '/clients/${c['id']}/documents'));
+  Future<void> loadDocuments() async {
+    documents = rows(
+      await api.call('GET', '/clients/${selectedClient!['id']}/documents'),
+    );
+    coDocuments = coClient == null
+        ? []
+        : rows(await api.call('GET', '/clients/${coClient!['id']}/documents'));
+  }
+
+  Future<void> chooseClient(Row input) async {
+    selectedClient = Map<String, dynamic>.from(
+      await api.call('GET', '/clients/${input['id']}'),
+    );
+    coClient = selectedClient!['cotitular'] == null
+        ? null
+        : Map<String, dynamic>.from(selectedClient!['cotitular']);
+    await loadDocuments();
     go('documents');
   }
 
@@ -113,17 +153,23 @@ class CasaController extends ChangeNotifier {
         'cliente_id': selectedClient!['id'],
         'monto': amount,
         'observacion': observation,
+        if (selectedPlan != null) 'plan_id': selectedPlan!['id'],
+        if (coClient != null) 'cotitular_id': coClient!['id'],
       }),
     );
     await refresh();
     go('success');
   }
 
-  Future<void> upload(String side, Uint8List bytes, String name) async {
-    await api.upload(selectedClient!['id'], side, bytes, name);
-    documents = rows(
-      await api.call('GET', '/clients/${selectedClient!['id']}/documents'),
-    );
+  Future<void> upload(
+    String side,
+    Uint8List bytes,
+    String name, {
+    bool cotitular = false,
+  }) async {
+    final person = cotitular ? coClient : selectedClient;
+    await api.upload(person!['id'], side, bytes, name);
+    await loadDocuments();
     notifyListeners();
   }
 }

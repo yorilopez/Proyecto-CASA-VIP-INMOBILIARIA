@@ -35,6 +35,7 @@ class ApiIntegrationTest {
     jdbc.update("delete from historial_lote");
     jdbc.update("delete from venta");
     jdbc.update("delete from separacion");
+    jdbc.update("delete from cliente_relacion");
     jdbc.update("delete from cliente");
     jdbc.update("delete from sesion");
     jdbc.update("delete from usuario where correo='otro@casavip.pe'");
@@ -424,5 +425,242 @@ class ApiIntegrationTest {
         java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(10)));
     mvc.perform(get("/api/projects").header("Authorization", t))
         .andExpect(status().isUnauthorized());
+  }
+
+  Map<String, Object> prototypePerson(String doc) {
+    return new java.util.LinkedHashMap<>(
+        Map.of(
+            "nombre",
+            "Persona demostrativa",
+            "tipo_documento",
+            "DNI",
+            "numero_documento",
+            doc,
+            "telefono",
+            "900123456",
+            "correo",
+            "demo@example.invalid",
+            "direccion",
+            "Av. Demostrativa 123, Huacho",
+            "ocupacion",
+            "Comerciante",
+            "proyecto_id",
+            1));
+  }
+
+  JsonNode createWithCo(String token, String main, String co) throws Exception {
+    var payload = prototypePerson(main);
+    var secondary = prototypePerson(co);
+    secondary.remove("proyecto_id");
+    payload.put("cotitular", secondary);
+    var response =
+        mvc.perform(
+                post("/api/clients")
+                    .header("Authorization", token)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(json.writeValueAsString(payload)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse();
+    return json.readTree(response.getContentAsString());
+  }
+
+  void uploadBoth(String token, long person) throws Exception {
+    var image = new java.awt.image.BufferedImage(30, 20, java.awt.image.BufferedImage.TYPE_INT_RGB);
+    var out = new java.io.ByteArrayOutputStream();
+    javax.imageio.ImageIO.write(image, "png", out);
+    for (String side : List.of("ANVERSO", "REVERSO"))
+      mvc.perform(
+              multipart("/api/clients/" + person + "/documents/" + side)
+                  .file(new MockMultipartFile("file", "foto.png", "image/png", out.toByteArray()))
+                  .header("Authorization", token))
+          .andExpect(status().isOk());
+  }
+
+  @Test
+  void camposYRelacionDelCotitularSePersisten() throws Exception {
+    String t = token("asesor@casavip.pe");
+    var result = createWithCo(t, "00000661", "00000662");
+    assertEquals("Comerciante", result.get("ocupacion").asText());
+    long person = result.get("id").asLong(), co = result.get("cotitular").get("id").asLong();
+    assertEquals(
+        "Av. Demostrativa 123, Huacho",
+        jdbc.queryForObject("select direccion from cliente where id=?", String.class, person));
+    assertEquals(
+        1,
+        jdbc.queryForObject(
+            "select count(*) from cliente_relacion where cliente_id=? and relacionado_id=?",
+            Integer.class,
+            person,
+            co));
+    mvc.perform(get("/api/clients/" + person).header("Authorization", t))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.cotitular.id").value(co));
+  }
+
+  @Test
+  void cotitularIgualAlTitularRevierteElRegistro() throws Exception {
+    String t = token("asesor@casavip.pe");
+    var input = prototypePerson("00000663");
+    var co = prototypePerson("00000663");
+    co.remove("proyecto_id");
+    input.put("cotitular", co);
+    mvc.perform(
+            post("/api/clients")
+                .header("Authorization", t)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(input)))
+        .andExpect(status().isBadRequest());
+    assertEquals(0, jdbc.queryForObject("select count(*) from cliente", Integer.class));
+  }
+
+  @Test
+  void unCotitularAjenoNoPuedeVincularse() throws Exception {
+    jdbc.update(
+        "insert into usuario(rol_id,correo,nombre,password_hash) select 1,'otro@casavip.pe','Otro"
+            + " Asesor',password_hash from usuario where id=1");
+    String other = token("otro@casavip.pe");
+    client(other, "00000664");
+    String t = token("asesor@casavip.pe");
+    var input = prototypePerson("00000665");
+    var co = prototypePerson("00000664");
+    co.remove("proyecto_id");
+    input.put("cotitular", co);
+    mvc.perform(
+            post("/api/clients")
+                .header("Authorization", t)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(input)))
+        .andExpect(status().isForbidden());
+    assertEquals(
+        0,
+        jdbc.queryForObject(
+            "select count(*) from cliente where numero_documento='00000665'", Integer.class));
+  }
+
+  @Test
+  void elPlanElegidoSeGuardaConImportesDelServidor() throws Exception {
+    String t = token("asesor@casavip.pe");
+    long person = client(t, "00000666");
+    long plan =
+        jdbc.queryForObject(
+            "select pp.id from plan_pago pp join lote_plan_pago lp on lp.plan_pago_id=pp.id where"
+                + " lp.lote_id=3 and pp.numero_cuotas=24",
+            Long.class);
+    mvc.perform(
+            post("/api/reservations")
+                .header("Authorization", t)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    json.writeValueAsString(
+                        Map.of(
+                            "lote_id",
+                            3,
+                            "cliente_id",
+                            person,
+                            "monto",
+                            500,
+                            "plan_id",
+                            plan,
+                            "cuota_acordada",
+                            1))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.numero_cuotas_acordado").value(24))
+        .andExpect(jsonPath("$.cuota_acordada").value(750.0));
+    assertEquals(plan, jdbc.queryForObject("select plan_pago_id from separacion", Long.class));
+    assertEquals(
+        0,
+        new BigDecimal("21000")
+            .compareTo(
+                jdbc.queryForObject("select precio_acordado from separacion", BigDecimal.class)));
+  }
+
+  @Test
+  void unPlanDeOtroLoteNoPuedeGuardarse() throws Exception {
+    String t = token("asesor@casavip.pe");
+    long person = client(t, "00000667");
+    mvc.perform(
+            post("/api/reservations")
+                .header("Authorization", t)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    json.writeValueAsString(
+                        Map.of("lote_id", 3, "cliente_id", person, "monto", 500, "plan_id", 6))))
+        .andExpect(status().isBadRequest());
+    assertEquals(0, jdbc.queryForObject("select count(*) from separacion", Integer.class));
+    assertEquals(
+        "DISPONIBLE", jdbc.queryForObject("select estado from lote where id=3", String.class));
+  }
+
+  @Test
+  void elCotitularRequiereSusCuatroFotografias() throws Exception {
+    String t = token("asesor@casavip.pe");
+    var people = createWithCo(t, "00000668", "00000669");
+    long person = people.get("id").asLong(), co = people.get("cotitular").get("id").asLong();
+    uploadBoth(t, person);
+    mvc.perform(
+            post("/api/reservations")
+                .header("Authorization", t)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    json.writeValueAsString(
+                        Map.of(
+                            "lote_id", 3, "cliente_id", person, "cotitular_id", co, "monto", 500))))
+        .andExpect(status().isBadRequest());
+    assertEquals(0, jdbc.queryForObject("select count(*) from separacion", Integer.class));
+  }
+
+  @Test
+  void separacionConCotitularConservaRelacionYDocumentos() throws Exception {
+    String t = token("asesor@casavip.pe");
+    var people = createWithCo(t, "00000670", "00000671");
+    long person = people.get("id").asLong(), co = people.get("cotitular").get("id").asLong();
+    uploadBoth(t, person);
+    uploadBoth(t, co);
+    mvc.perform(
+            post("/api/reservations")
+                .header("Authorization", t)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    json.writeValueAsString(
+                        Map.of(
+                            "lote_id", 3, "cliente_id", person, "cotitular_id", co, "monto", 500))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.cotitular_id").value(co));
+    assertEquals(4, jdbc.queryForObject("select count(*) from cliente_documento", Integer.class));
+  }
+
+  @Test
+  void elTitularPuedeCorregirSuFormularioAntesDeConfirmar() throws Exception {
+    String t = token("asesor@casavip.pe");
+    long person = client(t, "00000672");
+    var input = prototypePerson("00000672");
+    input.put("direccion", "Dirección corregida");
+    mvc.perform(
+            put("/api/clients/" + person)
+                .header("Authorization", t)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(input)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.direccion").value("Dirección corregida"));
+  }
+
+  @Test
+  void editarUnClienteAjenoEstaProhibido() throws Exception {
+    String t = token("asesor@casavip.pe");
+    long person = client(t, "00000673");
+    jdbc.update(
+        "insert into usuario(rol_id,correo,nombre,password_hash) select 1,'otro@casavip.pe','Otro"
+            + " Asesor',password_hash from usuario where id=1");
+    String other = token("otro@casavip.pe");
+    mvc.perform(
+            put("/api/clients/" + person)
+                .header("Authorization", other)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(prototypePerson("00000673"))))
+        .andExpect(status().isForbidden());
+    assertEquals(
+        "Cliente de prueba",
+        jdbc.queryForObject("select nombre from cliente where id=?", String.class, person));
   }
 }

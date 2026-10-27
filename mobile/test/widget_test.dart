@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -10,29 +11,57 @@ import 'package:casa_vip/controller.dart' as cv;
 class Fixture {
   int reservations = 0, loginCalls = 0;
   bool reject = false;
-  final lot = <String, dynamic>{
+  Map<String, dynamic>? reservationInput, clientInput;
+  final documents = <String, List<Map<String, dynamic>>>{};
+  final selectedPlans = [
+    {
+      'id': 12,
+      'nombre': '12 meses',
+      'inicial': 3000,
+      'numero_cuotas': 12,
+      'monto_cuota': 1500,
+    },
+    {
+      'id': 24,
+      'nombre': '24 meses',
+      'inicial': 3000,
+      'numero_cuotas': 24,
+      'monto_cuota': 750,
+    },
+    {
+      'id': 36,
+      'nombre': '36 meses',
+      'inicial': 3000,
+      'numero_cuotas': 36,
+      'monto_cuota': 500,
+    },
+    {
+      'id': 48,
+      'nombre': '48 meses',
+      'inicial': 3000,
+      'numero_cuotas': 48,
+      'monto_cuota': 375,
+    },
+  ];
+  late final Map<String, dynamic> lot = {
     'id': 3,
     'codigo': '6',
     'manzana': 'B',
+    'manzana_id': 1,
     'area_m2': 124.42,
     'precio': 21000,
     'estado': 'DISPONIBLE',
+    'referencia': 'Parque',
     'proyecto': 'SHENNAN HOUSE',
+    'ubicacion': 'Huacho, Lima',
     'etapa': 'Etapa 1',
+    'etapa_id': 1,
     'inicial': 3000,
     'numero_cuotas': 48,
-    'planes': [
-      {
-        'id': 3,
-        'nombre': '48 cuotas',
-        'inicial': 3000,
-        'numero_cuotas': 48,
-        'monto_cuota': 375,
-      },
-    ],
+    'planes': selectedPlans,
   };
   late final api = ApiClient(
-    'http://localhost:8080',
+    'http://192.0.2.1:8080',
     client: MockClient((request) async {
       final path = request.url.path;
       dynamic data;
@@ -47,11 +76,27 @@ class Fixture {
         }
         data = {
           'token': 'token-de-prueba',
-          'user': {'id': 1, 'name': 'Andrea Demo', 'role': 'ASESOR'},
+          'user': {
+            'id': 1,
+            'name': 'Andrea Demo',
+            'role': 'ASESOR',
+            'phone': '900000000',
+          },
         };
       } else if (path.endsWith('/projects')) {
         data = [
-          {'id': 1, 'nombre': 'SHENNAN HOUSE', 'ubicacion': 'Piloto comercial'},
+          {
+            'id': 1,
+            'nombre': 'SHENNAN HOUSE',
+            'ubicacion': 'Huacho, Lima',
+            'manzanas': 1,
+            'lotes': 2,
+            'disponibles': 1,
+          },
+        ];
+      } else if (path.endsWith('/stages')) {
+        data = [
+          {'id': 1, 'nombre': 'Etapa 1'},
         ];
       } else if (path.endsWith('/blocks')) {
         data = [
@@ -59,23 +104,50 @@ class Fixture {
             'id': 1,
             'codigo': 'B',
             'etapa': 'Etapa 1',
-            'total': 7,
-            'disponibles': 3,
+            'etapa_id': 1,
+            'total': 2,
+            'disponibles': 1,
           },
         ];
       } else if (path.endsWith('/lots')) {
-        data = [lot];
+        data = [
+          lot,
+          {...lot, 'id': 4, 'codigo': '7', 'estado': 'RESERVADO'},
+        ];
       } else if (path.endsWith('/lots/3')) {
         data = lot;
-      } else if (path.endsWith('/clients') && request.method == 'POST') {
-        data = {...jsonDecode(request.body) as Map<String, dynamic>, 'id': 10};
+      } else if (RegExp(r'/clients/\d+/documents').hasMatch(path)) {
+        final match = RegExp(
+          r'/clients/(\d+)/documents(?:/(ANVERSO|REVERSO))?$',
+        ).firstMatch(path)!;
+        final id = match.group(1)!, side = match.group(2);
+        if (request.method == 'POST') {
+          documents.putIfAbsent(id, () => []);
+          documents[id]!.removeWhere((d) => d['lado'] == side);
+          documents[id]!.add({'id': documents[id]!.length + 1, 'lado': side});
+          data = {'ok': true};
+        } else {
+          data = documents[id] ?? [];
+        }
+      } else if (path.endsWith('/clients') && request.method == 'POST' ||
+          RegExp(r'/clients/\d+$').hasMatch(path) && request.method == 'PUT') {
+        clientInput = jsonDecode(request.body);
+        data = {...clientInput!, 'id': 10};
+        if (clientInput!['cotitular'] != null) {
+          data['cotitular'] = {...clientInput!['cotitular'], 'id': 11};
+        }
       } else if (path.endsWith('/clients')) {
-        data = [];
-      } else if (path.endsWith('/documents')) {
         data = [];
       } else if (path.endsWith('/reservations') && request.method == 'POST') {
         reservations++;
-        data = {'id': 99, 'monto': 500};
+        reservationInput = jsonDecode(request.body);
+        data = {
+          'id': 99,
+          'monto': 500,
+          'fecha_registro': '2026-10-27T10:00:00-05:00',
+          'estado': 'ACTIVA',
+          'numero_cuotas_acordado': 24,
+        };
       } else if (path.endsWith('/reservations')) {
         data = [];
       } else {
@@ -84,114 +156,279 @@ class Fixture {
       return http.Response(
         jsonEncode(data),
         200,
-        headers: {'content-type': 'application/json'},
+        headers: {'content-type': 'application/json; charset=utf-8'},
       );
     }),
   );
 }
 
-Future<void> tapText(WidgetTester tester, String text) async {
-  final action = find.widgetWithText(FilledButton, text);
-  final target = action.evaluate().isNotEmpty
-      ? action.first
-      : find.text(text).first;
-  await tester.ensureVisible(target);
-  await tester.pumpAndSettle();
-  await tester.tap(target);
-  await tester.pumpAndSettle();
+void dimensions(WidgetTester t) {
+  t.view.physicalSize = const Size(430, 900);
+  t.view.devicePixelRatio = 1;
+  addTearDown(t.view.resetPhysicalSize);
+  addTearDown(t.view.resetDevicePixelRatio);
 }
 
-void dimensions(WidgetTester tester) {
-  tester.view.physicalSize = const Size(430, 900);
-  tester.view.devicePixelRatio = 1;
-  addTearDown(tester.view.resetPhysicalSize);
-  addTearDown(tester.view.resetDevicePixelRatio);
+Future<void> tapText(WidgetTester t, String text, {bool last = false}) async {
+  final button = find.widgetWithText(FilledButton, text);
+  final match = button.evaluate().isNotEmpty ? button : find.text(text);
+  final target = last ? match.last : match.first;
+  await t.ensureVisible(target);
+  await t.pumpAndSettle();
+  await t.tap(target);
+  await t.pumpAndSettle();
 }
 
-Future<void> login(WidgetTester tester) async {
-  await tester.enterText(find.byType(TextFormField).at(0), 'asesor@casavip.pe');
-  await tester.enterText(
-    find.byType(TextFormField).at(1),
-    'CasaVIP-demo-2026!',
+Future<void> enter(
+  WidgetTester t,
+  String label,
+  String value, {
+  bool last = false,
+}) async {
+  final match = find.byKey(ValueKey(label));
+  await t.ensureVisible(last ? match.last : match.first);
+  await t.enterText(last ? match.last : match.first, value);
+  await t.pumpAndSettle();
+}
+
+Future<void> login(WidgetTester t) async {
+  await enter(t, 'Correo corporativo', 'asesor@casavip.pe');
+  await enter(t, 'Contraseña', 'CasaVIP-demo-2026!');
+  await tapText(t, 'Ingresar');
+}
+
+Future<void> openLot(WidgetTester t) async {
+  await login(t);
+  await tapText(t, 'Buscar lote');
+  await tapText(t, 'Shennan House');
+  await tapText(t, 'Manzana B');
+  await tapText(t, 'Lote 6');
+}
+
+Future<void> fillPerson(WidgetTester t, {bool co = false}) async {
+  await enter(
+    t,
+    'Nombres y apellidos',
+    co ? 'Cotitular de prueba' : 'Cliente de prueba',
+    last: co,
   );
-  await tapText(tester, 'Ingresar');
+  await enter(t, 'DNI', co ? '00000112' : '00000111', last: co);
+  await enter(t, 'Teléfono', co ? '900000112' : '900000111', last: co);
+  await enter(
+    t,
+    'Dirección',
+    co ? 'Dirección del cotitular' : 'Dirección demostrativa',
+    last: co,
+  );
+  await enter(
+    t,
+    'Correo',
+    co ? 'co@example.test' : 'cliente@example.test',
+    last: co,
+  );
+  await enter(t, 'Ocupación', 'Comerciante', last: co);
+}
+
+void mockFiles() {
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+        const MethodChannel('pe.casavip/files'),
+        (call) async => call.method == 'pickImage'
+            ? {
+                'bytes': Uint8List.fromList(
+                  base64Decode(
+                    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=',
+                  ),
+                ),
+                'name': 'foto.png',
+              }
+            : null,
+      );
+  addTearDown(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('pe.casavip/files'),
+          null,
+        ),
+  );
+}
+
+Future<void> photos(WidgetTester t, {bool co = false}) async {
+  for (final label
+      in co
+          ? [
+              'DNI titular · Anverso',
+              'DNI titular · Reverso',
+              'DNI cotitular · Anverso',
+              'DNI cotitular · Reverso',
+            ]
+          : ['DNI · Anverso', 'DNI · Reverso']) {
+    await tapText(t, label);
+  }
 }
 
 void main() {
-  testWidgets('El formulario exige credenciales antes de enviar', (
-    tester,
-  ) async {
-    dimensions(tester);
+  testWidgets('El formulario exige credenciales antes de enviar', (t) async {
+    dimensions(t);
     final f = Fixture();
-    await tester.pumpWidget(CasaVipApp(api: f.api));
-    await tapText(tester, 'Ingresar');
+    await t.pumpWidget(CasaVipApp(api: f.api));
+    await tapText(t, 'Ingresar');
     expect(f.loginCalls, 0);
     expect(find.text('Completa este campo.'), findsNWidgets(2));
-    expect(tester.takeException(), isNull);
+    expect(t.takeException(), isNull);
   });
-  testWidgets('Un error de autenticación conserva el formulario', (
-    tester,
+  testWidgets('El login no muestra servidor, IP ni configuración técnica', (
+    t,
   ) async {
-    dimensions(tester);
+    dimensions(t);
+    final f = Fixture();
+    await t.pumpWidget(CasaVipApp(api: f.api));
+    expect(find.byType(TextFormField), findsNWidgets(2));
+    expect(find.text('Conexión'), findsNothing);
+    expect(find.text('Dirección del servidor'), findsNothing);
+    expect(find.textContaining('192.0.2.1'), findsNothing);
+    expect(find.textContaining('http://'), findsNothing);
+    expect(find.text('ACCESO DE ASESOR'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+  testWidgets('El error de acceso conserva el diseño y no revela el endpoint', (
+    t,
+  ) async {
+    dimensions(t);
     final f = Fixture()..reject = true;
-    await tester.pumpWidget(CasaVipApp(api: f.api));
-    await login(tester);
+    await t.pumpWidget(CasaVipApp(api: f.api));
+    await login(t);
     expect(find.text('Credenciales no válidas.'), findsOneWidget);
     expect(find.text('Bienvenido'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    expect(find.textContaining('192.0.2.1'), findsNothing);
+    expect(t.takeException(), isNull);
+  });
+  testWidgets('El catálogo recupera tarjetas, filtros y planes del prototipo', (
+    t,
+  ) async {
+    dimensions(t);
+    final f = Fixture();
+    await t.pumpWidget(CasaVipApp(api: f.api));
+    await openLot(t);
+    expect(find.text('Lote 06'), findsOneWidget);
+    expect(find.text('Ver condiciones'), findsOneWidget);
+    for (final n in ['12 meses', '24 meses', '36 meses', '48 meses']) {
+      expect(find.text(n), findsOneWidget);
+    }
+    expect(find.text('Ficha'), findsOneWidget);
+    expect(find.text('Separar lote'), findsOneWidget);
+    expect(t.takeException(), isNull);
   });
   testWidgets(
-    'El flujo visual registra la separación solo después de confirmar',
-    (tester) async {
-      dimensions(tester);
+    'El plan elegido y los campos del cliente llegan a la API al confirmar',
+    (t) async {
+      dimensions(t);
+      mockFiles();
       final f = Fixture();
-      await tester.pumpWidget(CasaVipApp(api: f.api));
-      await login(tester);
-      expect(find.text('Hola, Andrea Demo'), findsOneWidget);
-      await tapText(tester, 'Buscar lote');
-      await tapText(tester, 'Ver manzanas y lotes');
-      await tapText(tester, 'Manzana B');
-      await tapText(tester, 'Lote 6');
-      await tapText(tester, 'Separar este lote');
-      await tester.enterText(
-        find.widgetWithText(TextFormField, 'Nombres'),
-        'Cliente',
-      );
-      await tester.enterText(
-        find.widgetWithText(TextFormField, 'Apellidos'),
-        'Prueba',
-      );
-      await tester.enterText(
-        find.widgetWithText(TextFormField, 'Número de documento'),
-        '00123456',
-      );
-      await tester.enterText(
-        find.widgetWithText(TextFormField, 'Teléfono'),
-        '900123456',
-      );
-      await tapText(tester, 'Guardar y continuar');
-      expect(find.text('Fotografías del documento'), findsOneWidget);
-      await tapText(tester, 'Continuar');
-      await tapText(tester, 'Revisar separación');
+      await t.pumpWidget(CasaVipApp(api: f.api));
+      await openLot(t);
+      await tapText(t, '24 meses');
+      await tapText(t, 'Separar lote');
+      await fillPerson(t);
+      await tapText(t, 'Continuar');
+      expect(f.clientInput!['direccion'], 'Dirección demostrativa');
+      expect(f.clientInput!['ocupacion'], 'Comerciante');
+      await photos(t);
+      await tapText(t, 'Continuar');
+      expect(find.text('Condiciones acordadas'), findsOneWidget);
+      await tapText(t, 'Revisar separación');
       expect(f.reservations, 0);
       final button = find.widgetWithText(FilledButton, 'Confirmar separación');
-      expect(tester.widget<FilledButton>(button).onPressed, isNull);
-      await tester.ensureVisible(find.byType(CheckboxListTile));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(CheckboxListTile));
-      await tester.pumpAndSettle();
-      await tapText(tester, 'Confirmar separación');
+      expect(t.widget<FilledButton>(button).onPressed, isNull);
+      await t.ensureVisible(find.byType(Checkbox));
+      await t.tap(find.byType(Checkbox));
+      await t.pumpAndSettle();
+      await tapText(t, 'Confirmar separación');
       expect(f.reservations, 1);
-      expect(find.text('¡Separación exitosa!'), findsOneWidget);
-      expect(find.text('#99'), findsOneWidget);
-      expect(tester.takeException(), isNull);
+      expect(f.reservationInput!['plan_id'], 24);
+      expect(find.text('¡Lote reservado!'), findsOneWidget);
+      expect(find.text('SEP-2026-0099'), findsOneWidget);
+      expect(t.takeException(), isNull);
     },
   );
-  test('El cliente HTTP revoca el token cuando la API responde 401', () async {
+  testWidgets('El cotitular conserva sus datos y sus cuatro documentos', (
+    t,
+  ) async {
+    dimensions(t);
+    mockFiles();
+    final f = Fixture();
+    await t.pumpWidget(CasaVipApp(api: f.api));
+    await openLot(t);
+    await tapText(t, 'Separar lote');
+    await fillPerson(t);
+    await t.ensureVisible(find.byType(Switch));
+    await t.tap(find.byType(Switch));
+    await t.pumpAndSettle();
+    await fillPerson(t, co: true);
+    await tapText(t, 'Guardar cotitular');
+    await tapText(t, 'Continuar');
+    expect(f.clientInput!['cotitular']['numero_documento'], '00000112');
+    await photos(t, co: true);
+    expect(f.documents['10']!.length, 2);
+    expect(f.documents['11']!.length, 2);
+    await tapText(t, 'Continuar');
+    await tapText(t, 'Revisar separación');
+    expect(find.text('Cotitular'), findsOneWidget);
+    expect(find.text('Cotitular de prueba'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+  testWidgets('Los filtros por disponibilidad ocultan lotes reservados', (
+    t,
+  ) async {
+    dimensions(t);
+    final f = Fixture();
+    await t.pumpWidget(CasaVipApp(api: f.api));
+    await login(t);
+    await tapText(t, 'Buscar lote');
+    await tapText(t, 'Shennan House');
+    await tapText(t, 'Manzana B');
+    expect(find.text('Lote 7'), findsOneWidget);
+    await tapText(t, 'Disponibles');
+    expect(find.text('Lote 7'), findsNothing);
+    expect(find.text('1 lotes mostrados'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+  testWidgets('La sesión se cierra desde el avatar sin cambiar la cabecera', (
+    t,
+  ) async {
+    dimensions(t);
+    final f = Fixture();
+    await t.pumpWidget(CasaVipApp(api: f.api));
+    await login(t);
+    expect(find.text('Hola, Andrea'), findsOneWidget);
+    await t.tap(find.byTooltip('Mi cuenta'));
+    await t.pumpAndSettle();
+    await tapText(t, 'Cerrar sesión');
+    expect(find.text('Bienvenido'), findsOneWidget);
+    expect(f.api.token, isNull);
+    expect(t.takeException(), isNull);
+  });
+  testWidgets('El catálogo y el formulario caben en una pantalla de 360 px', (
+    t,
+  ) async {
+    dimensions(t);
+    t.view.physicalSize = const Size(360, 800);
+    final f = Fixture();
+    await t.pumpWidget(CasaVipApp(api: f.api));
+    await openLot(t);
+    await tapText(t, 'Separar lote');
+    await fillPerson(t);
+    expect(t.takeException(), isNull);
+  });
+  test('El cliente HTTP revoca la sesión ante 401', () async {
     final api = ApiClient(
       'http://localhost',
       client: MockClient(
-        (_) async => http.Response('{"message":"Sesión vencida"}', 401),
+        (_) async => http.Response(
+          '{"message":"Sesión vencida"}',
+          401,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        ),
       ),
     )..token = 'temporal';
     await expectLater(
@@ -201,17 +438,20 @@ void main() {
     expect(api.token, isNull);
   });
   test(
-    'El controlador usa el identificador real devuelto por el servidor',
+    'El controlador conserva el identificador real y envía el plan seleccionado',
     () async {
-      final f = Fixture();
-      final c = cv.CasaController(f.api);
-      await c.login('asesor@casavip.pe', 'clave');
-      c.lot = f.lot;
-      c.selectedClient = {'id': 10};
-      await c.reserve(500, 'Prueba');
-      expect(c.result!['id'], 99);
-      expect(c.screen, 'success');
-      expect(f.reservations, 1);
+      final f = Fixture(), c = cv.CasaController(Fixture().api);
+      final controller = cv.CasaController(f.api);
+      await controller.login('asesor@casavip.pe', 'clave');
+      controller.lot = f.lot;
+      controller.selectedClient = {'id': 10};
+      controller.selectedPlan = f.selectedPlans[1];
+      await controller.reserve(500, 'Prueba');
+      expect(controller.result!['id'], 99);
+      expect(f.reservationInput!['plan_id'], 24);
+      expect(controller.screen, 'success');
+      c.dispose();
+      controller.dispose();
     },
   );
 }

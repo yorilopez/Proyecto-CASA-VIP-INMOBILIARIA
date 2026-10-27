@@ -1,31 +1,14 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'platform_io.dart';
+import 'package:flutter/rendering.dart';
 import 'api.dart';
 import 'controller.dart' as cv;
+import 'platform_io.dart' as files;
+import 'prototype_style.dart';
 
-const ink = Color(0xff171714),
-    gold = Color(0xffc79517),
-    paper = Color(0xfff7f6f2),
-    muted = Color(0xff6f6c63);
-typedef Data = Map<String, dynamic>;
-String money(dynamic value) =>
-    'S/ ${(num.tryParse('$value') ?? 0).toStringAsFixed(2)}';
-String stateLabel(dynamic s) =>
-    const {
-      'DISPONIBLE': 'Disponible',
-      'RESERVADO': 'Reservado',
-      'VENDIDO': 'Vendido',
-      'NO_DISPONIBLE': 'No disponible',
-      'ACTIVA': 'Activa',
-      'ANULADA': 'Anulada',
-      'CONFIRMADA': 'Confirmada',
-    }[s] ??
-    '$s';
-void main() {
-  runApp(const CasaVipApp());
-}
+void main() => runApp(const CasaVipApp());
 
 class CasaVipApp extends StatelessWidget {
   final ApiClient? api;
@@ -36,38 +19,41 @@ class CasaVipApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       useMaterial3: true,
+      visualDensity: VisualDensity.standard,
+      fontFamily: 'Arial',
+      scaffoldBackgroundColor: paper,
       colorScheme: ColorScheme.fromSeed(
         seedColor: gold,
-        primary: gold,
+        primary: primaryGold,
         surface: paper,
       ),
-      scaffoldBackgroundColor: const Color(0xffe8e4dc),
-      fontFamily: 'Arial',
-      appBarTheme: const AppBarTheme(
-        backgroundColor: ink,
-        foregroundColor: Colors.white,
+      textTheme: const TextTheme(
+        bodyMedium: TextStyle(fontSize: 14, color: ink),
+        bodyLarge: TextStyle(fontSize: 14, color: ink),
       ),
       inputDecorationTheme: InputDecorationTheme(
+        isDense: true,
         filled: true,
         fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xffdedbd2)),
-        ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 15,
+          horizontal: 12,
+          vertical: 12,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xffd7d3c9)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xffd7d3c9)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: gold, width: 1.5),
         ),
       ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          backgroundColor: gold,
-          foregroundColor: Colors.white,
-          minimumSize: const Size.fromHeight(50),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(11),
-          ),
-        ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: primaryGold),
       ),
     ),
     home: CasaView(api: api),
@@ -83,53 +69,140 @@ class CasaView extends StatefulWidget {
 
 class _CasaViewState extends State<CasaView> {
   late final cv.CasaController c;
-  final email = TextEditingController(),
-      password = TextEditingController(),
-      server = TextEditingController();
+  final email = TextEditingController(), password = TextEditingController();
   final names = TextEditingController(),
-      surnames = TextEditingController(),
       document = TextEditingController(),
       phone = TextEditingController(),
-      mail = TextEditingController();
-  final amount = TextEditingController(text: '500'),
+      address = TextEditingController(),
+      mail = TextEditingController(),
+      occupation = TextEditingController();
+  final coNames = TextEditingController(),
+      coDocument = TextEditingController(),
+      coPhone = TextEditingController(),
+      coAddress = TextEditingController(),
+      coMail = TextEditingController(),
+      coOccupation = TextEditingController();
+  final amount = TextEditingController(text: '500.00'),
       observation = TextEditingController(),
       search = TextEditingController();
   final loginKey = GlobalKey<FormState>(),
       clientKey = GlobalKey<FormState>(),
-      separationKey = GlobalKey<FormState>();
-  bool busy = false, confirmed = false;
-  String type = 'DNI', filter = '';
-  Uint8List? card;
+      separationKey = GlobalKey<FormState>(),
+      sheetKey = GlobalKey(),
+      receiptKey = GlobalKey();
+  bool busy = false,
+      confirmed = false,
+      withCo = false,
+      clientsWithReservation = false,
+      reservationHistory = false;
+  String chip = 'Todos',
+      filterState = '',
+      filterLocation = '',
+      projectLocation = '';
+  int? filterStage;
+  String get screen => c.screen;
+  String get firstName => '${c.user?['name'] ?? ''}'.split(' ').first;
+  String get userName => '${c.user?['name'] ?? 'Asesor'}';
+  String get roleLabel => c.admin
+      ? 'Administrador'
+      : c.manager
+      ? 'Responsable comercial'
+      : 'Asesor comercial';
+  String projectName(dynamic n) =>
+      '$n' == 'SHENNAN HOUSE' ? 'Shennan House' : '${n ?? ''}';
+  String get projectTitle => projectName(
+    c.project?['nombre'] ?? c.lot?['proyecto'] ?? 'Shennan House',
+  );
+  List<Data> get plans =>
+      c.lot?['planes'] == null ? [] : cv.CasaController.rows(c.lot!['planes']);
+  Data get plan =>
+      c.selectedPlan ?? (plans.isEmpty ? <String, dynamic>{} : plans.last);
+  String get lotCode => '${c.lot?['codigo'] ?? ''}'.padLeft(2, '0');
+  String get lotSubtitle =>
+      'Manzana ${c.lot?['manzana'] ?? ''} · Lote $lotCode';
+  DateTime when(dynamic value) =>
+      DateTime.tryParse('$value')?.toLocal() ?? DateTime.now();
+  String dateText(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  String timeText(DateTime d) =>
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  String get dateHeading {
+    final d = DateTime.now();
+    const days = [
+      'LUNES',
+      'MARTES',
+      'MIÉRCOLES',
+      'JUEVES',
+      'VIERNES',
+      'SÁBADO',
+      'DOMINGO',
+    ];
+    const months = [
+      'ENERO',
+      'FEBRERO',
+      'MARZO',
+      'ABRIL',
+      'MAYO',
+      'JUNIO',
+      'JULIO',
+      'AGOSTO',
+      'SEPTIEMBRE',
+      'OCTUBRE',
+      'NOVIEMBRE',
+      'DICIEMBRE',
+    ];
+    return '${days[d.weekday - 1]}, ${d.day.toString().padLeft(2, '0')} DE ${months[d.month - 1]}';
+  }
+
   @override
   void initState() {
     super.initState();
     const configured = String.fromEnvironment('API_URL');
-    String base = configured.isNotEmpty
+    final base = configured.isNotEmpty
         ? configured
         : (kIsWeb ? Uri.base.origin : 'http://10.0.2.2:8080');
     c = cv.CasaController(widget.api ?? ApiClient(base));
-    server.text = c.api.baseUrl;
+    c.addListener(changed);
+  }
+
+  void changed() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    for (final f in [
+    for (final t in [
       email,
       password,
-      server,
       names,
-      surnames,
       document,
       phone,
+      address,
       mail,
+      occupation,
+      coNames,
+      coDocument,
+      coPhone,
+      coAddress,
+      coMail,
+      coOccupation,
       amount,
       observation,
       search,
     ]) {
-      f.dispose();
+      t.dispose();
     }
+    c.removeListener(changed);
     c.dispose();
     super.dispose();
+  }
+
+  void message(String s) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s), behavior: SnackBarBehavior.floating),
+      );
+    }
   }
 
   Future<void> run(Future<void> Function() action) async {
@@ -139,14 +212,13 @@ class _CasaViewState extends State<CasaView> {
       await action();
     } catch (e) {
       if (mounted) {
-        if (e is ApiException && e.status == 401 && c.screen != 'login') {
+        if (e is ApiException && e.status == 401 && screen != 'login') {
           c.clear();
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            behavior: SnackBarBehavior.floating,
-          ),
+        message(
+          e is ApiException
+              ? e.message
+              : 'No se pudo completar la operación. Inténtalo nuevamente.',
         );
       }
     } finally {
@@ -156,17 +228,20 @@ class _CasaViewState extends State<CasaView> {
 
   void go(String s) {
     search.clear();
-    filter = '';
+    chip = 'Todos';
+    filterState = '';
+    filterLocation = '';
+    filterStage = null;
     c.go(s);
   }
 
   void back() {
-    go(switch (c.screen) {
+    go(switch (screen) {
       'blocks' => 'projects',
       'lots' => 'blocks',
       'lot-detail' => 'lots',
       'commercial-sheet' => 'lot-detail',
-      'client-form' => 'lot-detail',
+      'client-form' => c.lot == null ? 'clients' : 'lot-detail',
       'documents' => 'client-form',
       'separation' => 'documents',
       'review' => 'separation',
@@ -174,941 +249,2305 @@ class _CasaViewState extends State<CasaView> {
     });
   }
 
-  Widget title(String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 14, top: 8),
-    child: Text(
-      text,
-      style: const TextStyle(
-        fontSize: 22,
-        fontWeight: FontWeight.w800,
-        color: ink,
+  void clearClient() {
+    for (final f in [
+      names,
+      document,
+      phone,
+      address,
+      mail,
+      occupation,
+      coNames,
+      coDocument,
+      coPhone,
+      coAddress,
+      coMail,
+      coOccupation,
+    ]) {
+      f.clear();
+    }
+    withCo = false;
+    confirmed = false;
+    c.selectedClient = null;
+    c.coClient = null;
+    c.documents = [];
+    c.coDocuments = [];
+    amount.text = '500.00';
+    observation.clear();
+  }
+
+  void newClient() {
+    clearClient();
+    go('client-form');
+  }
+
+  Widget tap(
+    Widget child,
+    VoidCallback? action, {
+    String? label,
+    double radius = 12,
+  }) => Semantics(
+    button: true,
+    enabled: action != null,
+    label: label,
+    child: Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: action,
+        borderRadius: BorderRadius.circular(radius),
+        child: child,
       ),
     ),
-  );
-  Widget note(String text, {IconData icon = Icons.shield_outlined}) =>
-      Container(
-        margin: const EdgeInsets.symmetric(vertical: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xffeef4ef),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 19, color: const Color(0xff396046)),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 12,
-                  height: 1.4,
-                  color: Color(0xff396046),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-  Widget box(Widget child, {Color? color}) => Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: color ?? Colors.white,
-      border: Border.all(color: const Color(0xffdedbd2)),
-      borderRadius: BorderRadius.circular(13),
-    ),
-    child: child,
   );
   Widget field(
     String label,
     TextEditingController controller, {
-    bool mandatory = true,
+    bool required = false,
     bool obscure = false,
+    String? icon,
+    String? hint,
     TextInputType? keyboard,
     int lines = 1,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
-    child: TextFormField(
-      controller: controller,
-      obscureText: obscure,
-      maxLines: lines,
-      keyboardType: keyboard,
-      validator: mandatory
-          ? (v) => v == null || v.trim().isEmpty ? 'Completa este campo.' : null
-          : null,
-      decoration: InputDecoration(labelText: label),
-    ),
-  );
-  Widget button(String text, VoidCallback? action, {IconData? icon}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 5),
-    child: FilledButton(
-      onPressed: busy ? null : action,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
-          if (icon != null) ...[const SizedBox(width: 8), Icon(icon, size: 19)],
-        ],
+    String? Function(String?)? validate,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      tx(
+        label,
+        size: 12.64,
+        weight: FontWeight.w700,
+        color: const Color(0xff3a3935),
       ),
-    ),
+      space(8),
+      Semantics(
+        label: label,
+        child: TextFormField(
+          key: ValueKey(label),
+          controller: controller,
+          obscureText: obscure,
+          maxLines: lines,
+          keyboardType: keyboard,
+          style: const TextStyle(fontSize: 14.4, color: ink),
+          autofillHints: label == 'Correo corporativo'
+              ? [AutofillHints.username]
+              : label == 'Contraseña'
+              ? [AutofillHints.password]
+              : null,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(color: Color(0xff8a867d), fontSize: 14),
+            prefixIcon: icon == null
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: ico(icon, size: 18, color: const Color(0xff8a867d)),
+                  ),
+            prefixIconConstraints: icon == null
+                ? null
+                : const BoxConstraints(minWidth: 40, maxWidth: 40),
+          ),
+          validator:
+              validate ??
+              (required
+                  ? (v) => v == null || v.trim().isEmpty
+                        ? 'Completa este campo.'
+                        : null
+                  : null),
+        ),
+      ),
+    ],
   );
-  Widget pair(String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 7),
+  Widget header(String title, String subtitle, {bool canBack = false}) =>
+      Container(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+        decoration: const BoxDecoration(
+          color: ink,
+          border: PrototypeBorder(bottom: BorderSide(color: gold, width: 3)),
+        ),
+        child: Row(
+          children: [
+            if (canBack)
+              Semantics(
+                button: true,
+                label: 'Volver',
+                child: tap(
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: const Color(0xff2b2b27),
+                      border: Border.all(color: const Color(0xff3e3e38)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    alignment: Alignment.center,
+                    child: ico('arrow-left', color: Colors.white),
+                  ),
+                  back,
+                ),
+              )
+            else
+              brand(compact: true),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  tx(
+                    title,
+                    size: 16.32,
+                    color: Colors.white,
+                    weight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+                  space(2),
+                  tx(
+                    subtitle,
+                    size: 12.48,
+                    color: const Color(0xffb9b6ae),
+                    height: 1.2,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            PopupMenuButton<String>(
+              tooltip: 'Mi cuenta',
+              padding: EdgeInsets.zero,
+              onSelected: accountAction,
+              itemBuilder: (ctx) => [
+                PopupMenuItem<String>(
+                  enabled: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(userName),
+                      Text(
+                        roleLabel,
+                        style: const TextStyle(fontSize: 12, color: muted),
+                      ),
+                    ],
+                  ),
+                ),
+                if (screen == 'lot-detail')
+                  const PopupMenuItem(
+                    value: 'history',
+                    child: Text('Historial del lote'),
+                  ),
+                if (c.admin && screen == 'lot-detail')
+                  const PopupMenuItem(
+                    value: 'state',
+                    child: Text('Administrar estado'),
+                  ),
+                if (c.manager && screen == 'reservations')
+                  const PopupMenuItem(
+                    value: 'excel',
+                    child: Text('Exportar reporte Excel'),
+                  ),
+                const PopupMenuItem(
+                  value: 'logout',
+                  child: Text('Cerrar sesión'),
+                ),
+              ],
+              child: avatar(userName),
+            ),
+          ],
+        ),
+      );
+  void accountAction(String action) {
+    if (action == 'logout') {
+      run(c.logout);
+    }
+    if (action == 'history') {
+      showHistory();
+    }
+    if (action == 'state') {
+      adminState();
+    }
+    if (action == 'excel') {
+      run(() async {
+        final b = await c.api.bytes('/reports/reservations.xlsx');
+        await files.shareFile(
+          b,
+          'separaciones.xlsx',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
+      });
+    }
+  }
+
+  Widget nav() => Container(
+    height: 68,
+    padding: const EdgeInsets.fromLTRB(4, 7, 4, 8),
+    decoration: const BoxDecoration(
+      color: Colors.white,
+      border: PrototypeBorder(top: BorderSide(color: Color(0xffdedad1))),
+    ),
     child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(color: muted, fontSize: 13),
+        for (final item in [
+          ('home', 'Inicio', 'house'),
+          ('projects', 'Proyectos', 'building-2'),
+          ('clients', 'Clientes', 'users-round'),
+          ('reservations', 'Separaciones', 'file-text'),
+        ])
+          Expanded(
+            child: Builder(
+              builder: (context) {
+                final active =
+                    screen == item.$1 ||
+                    (item.$1 == 'projects' &&
+                        ['blocks', 'lots', 'lot-detail'].contains(screen));
+                return Semantics(
+                  selected: active,
+                  button: true,
+                  label: item.$2,
+                  child: tap(
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ico(
+                          item.$3,
+                          size: 20,
+                          color: active
+                              ? const Color(0xff9a6f05)
+                              : const Color(0xff858178),
+                          stroke: active ? 2.4 : 1.9,
+                        ),
+                        space(4),
+                        tx(
+                          item.$2,
+                          size: 8.96,
+                          color: active
+                              ? const Color(0xff9a6f05)
+                              : const Color(0xff858178),
+                          weight: active ? FontWeight.w800 : FontWeight.w400,
+                        ),
+                      ],
+                    ),
+                    () => go(item.$1),
+                  ),
+                );
+              },
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Flexible(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-          ),
-        ),
       ],
     ),
   );
-  Widget badge(dynamic state) {
-    final label = stateLabel(state);
-    final color = state == 'DISPONIBLE' || state == 'ACTIVA'
-        ? const Color(0xff287541)
-        : state == 'RESERVADO'
-        ? const Color(0xff9a7006)
-        : state == 'VENDIDO' || state == 'CONFIRMADA'
-        ? const Color(0xffa03932)
-        : muted;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  Widget brand({double height = 70}) => Image.asset(
-    'assets/casa-vip-logo.png',
-    height: height,
-    fit: BoxFit.contain,
-  );
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: LayoutBuilder(
-        builder: (context, size) {
-          final desktop = size.maxWidth > 600;
-          return Center(
-            child: Padding(
-              padding: EdgeInsets.all(desktop ? 18 : 0),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(desktop ? 24 : 0),
-                child: SizedBox(
-                  width: 430,
-                  height: desktop
-                      ? math.min(900, size.maxHeight - 36)
-                      : size.maxHeight,
-                  child: AnimatedBuilder(
-                    animation: c,
-                    builder: (context, _) => ColoredBox(
-                      color: paper,
-                      child: Stack(
-                        children: [
-                          Column(
-                            children: [
-                              if (c.screen != 'login') header(),
-                              Expanded(
-                                child: ListView(
-                                  key: ValueKey(c.screen),
-                                  padding: c.screen == 'login'
-                                      ? EdgeInsets.zero
-                                      : const EdgeInsets.fromLTRB(
-                                          20,
-                                          18,
-                                          20,
-                                          25,
-                                        ),
-                                  children: [body()],
-                                ),
-                              ),
-                              if (c.screen != 'login' && c.screen != 'success')
-                                nav(),
-                            ],
+    body: LayoutBuilder(
+      builder: (context, constraints) {
+        final framed = constraints.maxWidth > 480;
+        final view = Stack(
+          children: [
+            Column(
+              children: [
+                if (screen != 'login' && screen != 'success')
+                  header(
+                    switch (screen) {
+                      'home' => 'Hola, $firstName',
+                      'projects' => 'Proyectos',
+                      'blocks' => projectTitle,
+                      'lots' => 'Manzana ${c.block?['codigo'] ?? ''}',
+                      'lot-detail' => 'Detalle del lote',
+                      'commercial-sheet' => 'Ficha comercial',
+                      'client-form' => 'Registrar cliente',
+                      'documents' => 'Documentos de identidad',
+                      'separation' => 'Datos de separación',
+                      'review' => 'Confirmar separación',
+                      'clients' => 'Clientes',
+                      'reservations' => 'Separaciones',
+                      _ => 'CASA VIP',
+                    },
+                    switch (screen) {
+                      'home' => roleLabel,
+                      'projects' => 'Selecciona dónde buscar',
+                      'blocks' => 'Elige una manzana',
+                      'lots' => projectTitle,
+                      'lot-detail' => projectTitle,
+                      'commercial-sheet' => 'Lista para compartir',
+                      'client-form' =>
+                        c.lot == null ? 'Registro comercial' : lotSubtitle,
+                      'documents' => '${c.selectedClient?['nombre'] ?? ''}',
+                      'separation' => lotSubtitle,
+                      'review' => 'Revisa antes de registrar',
+                      'clients' => 'Mi cartera comercial',
+                      'reservations' => 'Operaciones del asesor',
+                      _ => roleLabel,
+                    },
+                    canBack: ![
+                      'home',
+                      'projects',
+                      'clients',
+                      'reservations',
+                    ].contains(screen),
+                  ),
+                Expanded(
+                  child: screen == 'login'
+                      ? login()
+                      : screen == 'success'
+                      ? success()
+                      : SingleChildScrollView(
+                          key: ValueKey(screen),
+                          padding: EdgeInsets.fromLTRB(
+                            20,
+                            [
+                                  'client-form',
+                                  'documents',
+                                  'separation',
+                                  'review',
+                                ].contains(screen)
+                                ? 17
+                                : screen == 'lots'
+                                ? 16
+                                : 22,
+                            20,
+                            30,
                           ),
-                          if (busy)
-                            const Positioned(
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              child: LinearProgressIndicator(color: gold),
-                            ),
-                          if (busy)
-                            const Positioned.fill(
-                              child: AbsorbPointer(
-                                child: ColoredBox(color: Color(0x08ffffff)),
-                              ),
-                            ),
-                        ],
-                      ),
+                          child: viewForScreen(),
+                        ),
+                ),
+                if (![
+                  'login',
+                  'commercial-sheet',
+                  'client-form',
+                  'documents',
+                  'separation',
+                  'review',
+                  'success',
+                ].contains(screen))
+                  nav(),
+              ],
+            ),
+            if (busy)
+              const Positioned.fill(
+                child: AbsorbPointer(
+                  child: ColoredBox(
+                    color: Color(0x11000000),
+                    child: Center(
+                      child: CircularProgressIndicator(color: gold),
                     ),
                   ),
                 ),
               ),
+          ],
+        );
+        return ColoredBox(
+          color: const Color(0xffe8e4dc),
+          child: Center(
+            child: Container(
+              width: framed ? 430 : constraints.maxWidth,
+              height: framed
+                  ? math.min(900, constraints.maxHeight - 36)
+                  : constraints.maxHeight,
+              margin: framed ? const EdgeInsets.all(18) : EdgeInsets.zero,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: paper,
+                borderRadius: BorderRadius.circular(framed ? 30 : 0),
+                border: framed
+                    ? Border.all(color: const Color(0xffd8d3c9))
+                    : null,
+                boxShadow: framed
+                    ? [
+                        const BoxShadow(
+                          color: Color(0x301f1b13),
+                          blurRadius: 70,
+                          offset: Offset(0, 26),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: SafeArea(child: view),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     ),
   );
-  Widget header() {
-    final labels = {
-      'home': 'Hola, ${c.user?['name'] ?? ''}',
-      'projects': 'Proyectos',
-      'blocks': 'Manzanas',
-      'lots': 'Lotes',
-      'lot-detail': 'Detalle del lote',
-      'commercial-sheet': 'Ficha comercial',
-      'client-form': 'Registro de cliente',
-      'documents': 'Documentos del cliente',
-      'separation': 'Datos de separación',
-      'review': 'Confirmar separación',
-      'success': 'Operación registrada',
-      'clients': 'Clientes',
-      'reservations': 'Separaciones',
-    };
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 16, 14, 15),
-      decoration: const BoxDecoration(
-        color: ink,
-        border: Border(bottom: BorderSide(color: gold, width: 3)),
-      ),
-      child: Row(
-        children: [
-          if (![
-            'home',
-            'projects',
-            'clients',
-            'reservations',
-          ].contains(c.screen))
-            IconButton(
-              tooltip: 'Volver',
-              onPressed: back,
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: brand(height: 32),
-            ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  labels[c.screen] ?? '',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  c.user?['role'] == 'ASESOR'
-                      ? 'Asesor comercial'
-                      : c.user?['role'] == 'ADMINISTRADOR'
-                      ? 'Administrador'
-                      : 'Responsable comercial',
-                  style: const TextStyle(
-                    color: Color(0xffb9b6ae),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Cerrar sesión',
-            onPressed: () => run(c.logout),
-            icon: const Icon(Icons.logout, color: gold, size: 21),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget nav() {
-    const pages = ['home', 'projects', 'clients', 'reservations'];
-    int index = pages.indexOf(c.screen);
-    if (index < 0) index = 1;
-    return NavigationBar(
-      height: 70,
-      selectedIndex: index,
-      indicatorColor: const Color(0xfff5e8bb),
-      backgroundColor: Colors.white,
-      onDestinationSelected: (i) => run(() async {
-        if (i == 2 || i == 3) {
-          await c.refresh();
-        }
-        if (i == 2) c.lot = null;
-        go(pages[i]);
-      }),
-      destinations: const [
-        NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Inicio'),
-        NavigationDestination(icon: Icon(Icons.apartment), label: 'Proyectos'),
-        NavigationDestination(
-          icon: Icon(Icons.people_outline),
-          label: 'Clientes',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.description_outlined),
-          label: 'Separaciones',
-        ),
-      ],
-    );
-  }
-
-  Widget body() => switch (c.screen) {
-    'login' => login(),
+  Widget viewForScreen() => switch (screen) {
     'home' => home(),
     'projects' => projects(),
     'blocks' => blocks(),
     'lots' => lots(),
     'lot-detail' => detail(),
-    'commercial-sheet' => commercialCard(),
+    'commercial-sheet' => commercial(),
     'client-form' => clientForm(),
     'documents' => documents(),
     'separation' => separation(),
     'review' => review(),
-    'success' => success(),
     'clients' => clients(),
     'reservations' => reservations(),
     _ => const SizedBox.shrink(),
   };
-  Widget login() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Container(
-        padding: const EdgeInsets.fromLTRB(30, 38, 30, 28),
-        color: ink,
-        child: Column(
-          children: [
-            brand(height: 100),
-            const SizedBox(height: 20),
-            const Text(
-              'Información de lotes y separaciones, lista para atender al cliente.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xffd5d1c7),
-                fontSize: 14,
-                height: 1.5,
-              ),
+  Widget login() => ColoredBox(
+    color: Colors.white,
+    child: SingleChildScrollView(
+      key: const ValueKey('login-scroll'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 318,
+            child: Stack(
+              children: [
+                const Positioned.fill(child: ColoredBox(color: ink)),
+                Positioned.fill(
+                  left: 16,
+                  right: 16,
+                  top: 16,
+                  bottom: 16,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: gold.withValues(alpha: .38)),
+                    ),
+                  ),
+                ),
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        tx(
+                          'PROTOTIPO COMERCIAL',
+                          size: 10.72,
+                          color: const Color(0xffd4a92f),
+                          weight: FontWeight.w800,
+                          spacing: 2.5,
+                        ),
+                        space(11),
+                        brand(),
+                        space(18),
+                        Container(width: 52, height: 2, color: gold),
+                        space(12),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 290),
+                          child: tx(
+                            'Información de lotes y separaciones, lista para atender al cliente.',
+                            size: 14.08,
+                            color: const Color(0xffc7c4bc),
+                            height: 1.5,
+                            align: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-      Padding(
-        padding: const EdgeInsets.all(25),
-        child: Form(
-          key: loginKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'ACCESO DEL EQUIPO COMERCIAL',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Color(0xff9a7006),
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
-              ),
-              title('Bienvenido'),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 22),
-                child: Text(
-                  'Ingresa para consultar precios, clientes y disponibilidad.',
-                  style: TextStyle(color: muted, fontSize: 13, height: 1.5),
-                ),
-              ),
-              field(
-                'Correo corporativo',
-                email,
-                keyboard: TextInputType.emailAddress,
-              ),
-              field('Contraseña', password, obscure: true),
-              button(
-                'Ingresar',
-                () => run(() async {
-                  if (loginKey.currentState!.validate()) {
-                    c.api.baseUrl = server.text.trim();
-                    await c.login(email.text.trim(), password.text);
-                  }
-                }),
-                icon: Icons.arrow_forward,
-              ),
-              note('Acceso seguro para el equipo comercial'),
-              ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                title: const Text(
-                  'Conexión',
-                  style: TextStyle(color: muted, fontSize: 12),
-                ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(26, 26, 26, 22),
+            child: Form(
+              key: loginKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  eyebrow('ACCESO DE ASESOR'),
+                  space(4),
+                  tx('Bienvenido', size: 28, height: 1.2, spacing: -1.1),
+                  space(7),
+                  tx(
+                    'Ingresa para consultar precios, clientes y disponibilidad.',
+                    size: 14.24,
+                    color: const Color(0xff716e66),
+                    height: 1.45,
+                  ),
+                  space(23),
                   field(
-                    'Dirección del servidor',
-                    server,
-                    keyboard: TextInputType.url,
+                    'Correo corporativo',
+                    email,
+                    required: true,
+                    icon: 'user-round',
+                    hint: 'asesor@casavip.pe',
+                    keyboard: TextInputType.emailAddress,
+                  ),
+                  space(17),
+                  field(
+                    'Contraseña',
+                    password,
+                    required: true,
+                    obscure: true,
+                    icon: 'lock-keyhole',
+                    hint: '••••••••',
+                  ),
+                  space(17),
+                  primary(
+                    'Ingresar',
+                    () => run(() async {
+                      if (loginKey.currentState!.validate()) {
+                        await c.login(email.text.trim(), password.text);
+                      }
+                    }),
+                    after: 'arrow-right',
+                  ),
+                  space(23),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ico(
+                        'shield-check',
+                        size: 18,
+                        color: const Color(0xffa77a0b),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: tx(
+                          'Acceso seguro para el equipo comercial',
+                          size: 12,
+                          color: const Color(0xff78746b),
+                          align: TextAlign.center,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-        ),
-      ),
-    ],
-  );
-  Widget home() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      box(
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
-              style: const TextStyle(
-                color: gold,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
             ),
-            const SizedBox(height: 12),
-            const Text(
-              '¿Qué deseas gestionar hoy?',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 27,
-                fontWeight: FontWeight.w800,
-                height: 1.15,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Consulta información vigente antes de atender a tu cliente.',
-              style: TextStyle(
-                color: Color(0xffc0bdb5),
-                fontSize: 13,
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-        color: ink,
-      ),
-      title('Acciones rápidas'),
-      Row(
-        children: [
-          Expanded(
-            child: action(
-              'Buscar lote',
-              'Precio y disponibilidad',
-              Icons.search,
-              () => go('projects'),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: action(
-              'Nuevo cliente',
-              'Registro comercial',
-              Icons.person_add_alt,
-              () => run(() async {
-                c.lot = null;
-                clearClient();
-                go('client-form');
-              }),
-            ),
-          ),
-        ],
-      ),
-      title('Proyecto destacado'),
-      for (final p in c.projects) projectCard(p),
-      title('Mi actividad'),
-      box(
-        Column(
-          children: [
-            pair('Clientes registrados', '${c.clients.length}'),
-            pair(
-              'Separaciones activas',
-              '${c.reservations.where((r) => r['estado'] == 'ACTIVA').length}',
-            ),
-          ],
-        ),
-      ),
-      TextButton.icon(
-        onPressed: () => run(c.refresh),
-        icon: const Icon(Icons.refresh, size: 18),
-        label: const Text('Actualizar información'),
-      ),
-    ],
-  );
-  Widget action(String name, String sub, IconData icon, VoidCallback tap) =>
-      InkWell(
-        onTap: tap,
-        borderRadius: BorderRadius.circular(13),
-        child: box(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: gold, size: 27),
-              const SizedBox(height: 16),
-              Text(
-                name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(sub, style: const TextStyle(color: muted, fontSize: 11)),
-            ],
-          ),
-        ),
-      );
-  Widget projectCard(Data p) => InkWell(
-    onTap: () => run(() => c.selectProject(p)),
-    child: box(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.holiday_village_outlined, size: 45, color: gold),
-          const SizedBox(height: 14),
-          Text(
-            '${p['nombre']}',
-            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${p['ubicacion']}',
-            style: const TextStyle(color: muted, fontSize: 12),
-          ),
-          const SizedBox(height: 16),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Ver manzanas y lotes',
-                style: TextStyle(
-                  color: Color(0xff9a7006),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Icon(Icons.arrow_forward, color: gold, size: 19),
-            ],
           ),
         ],
       ),
     ),
   );
-  Widget projects() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      title('Encuentra el proyecto'),
-      const Padding(
-        padding: EdgeInsets.only(bottom: 18),
-        child: Text(
-          'Selecciona un proyecto para consultar información comercial.',
-          style: TextStyle(color: muted, fontSize: 13),
-        ),
-      ),
-      for (final p in c.projects) projectCard(p),
-      if (c.projects.isEmpty) note('No hay proyectos disponibles.'),
-    ],
-  );
-  Widget blocks() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(
-        '${c.project?['nombre']}',
-        style: const TextStyle(
-          color: Color(0xff9a7006),
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
-        ),
-      ),
-      title('Selecciona una manzana'),
-      for (final b in c.blocks)
-        InkWell(
-          onTap: () => run(() => c.selectBlock(b)),
-          child: box(
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xfff5e8bb),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${b['codigo']}',
-                    style: const TextStyle(
-                      fontSize: 27,
-                      fontWeight: FontWeight.bold,
+  Widget home() {
+    final active = c.reservations.where((r) => r['estado'] == 'ACTIVA').length;
+    final available = c.projects.fold<int>(
+      0,
+      (sum, p) => sum + (p['disponibles'] as num? ?? 0).toInt(),
+    );
+    final recent = c.reservations.isEmpty ? null : c.reservations.first;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: charcoal,
+            border: Border.all(color: const Color(0xff31312b)),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                right: -31,
+                top: -34,
+                child: Transform.rotate(
+                  angle: .314,
+                  child: Container(
+                    width: 104,
+                    height: 104,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: gold.withValues(alpha: .38)),
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 19,
+                  vertical: 21,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          eyebrow(dateHeading, golden: true),
+                          space(7),
+                          tx(
+                            '¿Qué deseas gestionar hoy?',
+                            size: 23.68,
+                            height: 1.12,
+                            color: Colors.white,
+                            spacing: -.8,
+                          ),
+                          space(7),
+                          tx(
+                            'Consulta información vigente antes de atender a tu cliente.',
+                            size: 13.12,
+                            color: const Color(0xffbdbab2),
+                            height: 1.4,
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      width: 62,
+                      height: 62,
+                      child: Center(
+                        child: ico(
+                          'house',
+                          size: 46,
+                          color: const Color(0xffd8aa32),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        sectionTitle('Acciones rápidas'),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 112,
+              child: quickCard(
+                'Buscar lote',
+                'Precio y disponibilidad',
+                'search',
+                () => go('projects'),
+                featured: true,
+              ),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              flex: 88,
+              child: quickCard(
+                'Nuevo cliente',
+                'Registro comercial',
+                'user-round',
+                () {
+                  c.lot = null;
+                  newClient();
+                },
+              ),
+            ),
+          ],
+        ),
+        sectionTitle(
+          'Resumen de hoy',
+          action: 'Ver actividad',
+          onAction: () => go('reservations'),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: metric(
+                '$available',
+                'Lotes disponibles',
+                'layout-grid',
+                const Color(0xffe4f2e7),
+                const Color(0xff28713d),
+              ),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: metric(
+                '$active',
+                'Separaciones',
+                'file-text',
+                const Color(0xffe5edf7),
+                const Color(0xff2f5d91),
+              ),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: metric(
+                '${c.clients.length}',
+                'Clientes activos',
+                'users-round',
+                const Color(0xfffff1c8),
+                const Color(0xff9a6d00),
+              ),
+            ),
+          ],
+        ),
+        space(18),
+        tap(
+          uiBox(
+            Row(
+              children: [
+                Container(
+                  width: 37,
+                  height: 37,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: const Color(0xfffff2cf),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: ico('clock-3', color: const Color(0xff9c7104)),
+                ),
+                const SizedBox(width: 11),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Manzana ${b['codigo']}',
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      tx(
+                        'Última actividad',
+                        size: 12.64,
+                        weight: FontWeight.w700,
                       ),
-                      Text(
-                        '${b['etapa']}  ·  ${b['total']} lotes',
-                        style: const TextStyle(color: muted, fontSize: 12),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        '${b['disponibles']} disponibles',
-                        style: const TextStyle(
-                          color: Color(0xff287541),
-                          fontSize: 12,
-                        ),
+                      space(3),
+                      tx(
+                        recent == null
+                            ? 'Todavía no hay separaciones.'
+                            : 'Separación de Manzana ${recent['manzana']} · Lote ${recent['lote']}',
+                        size: 11.2,
+                        color: muted,
                       ),
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: gold),
+                if (recent != null)
+                  tx(
+                    timeText(when(recent['fecha_registro'])),
+                    size: 11.04,
+                    color: muted,
+                  ),
               ],
             ),
+            borders: const PrototypeBorder(
+              left: BorderSide(color: gold, width: 3),
+              top: BorderSide(color: border),
+              right: BorderSide(color: border),
+              bottom: BorderSide(color: border),
+            ),
+            radius: 12,
+          ),
+          () => go('reservations'),
+        ),
+      ],
+    );
+  }
+
+  Widget quickCard(
+    String label,
+    String hint,
+    String icon,
+    VoidCallback action, {
+    bool featured = false,
+  }) => tap(
+    Container(
+      constraints: const BoxConstraints(minHeight: 122),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: featured ? const Color(0xfffff7dc) : Colors.white,
+        border: Border.all(color: featured ? const Color(0xffe5cc7f) : border),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ico(icon, size: 23, color: const Color(0xffa57704)),
+              space(12),
+              tx(label, size: 14.4, weight: FontWeight.w700),
+              space(3),
+              tx(hint, size: 11.2, color: const Color(0xff7a766d)),
+            ],
+          ),
+          Positioned(
+            right: 0,
+            top: -2,
+            child: ico(
+              'chevron-right',
+              size: 18,
+              color: const Color(0xffa57704),
+            ),
+          ),
+        ],
+      ),
+    ),
+    action,
+    label: label,
+    radius: 15,
+  );
+  Widget metric(String value, String label, String icon, Color bg, Color fg) =>
+      uiBox(
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 80),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 31,
+                height: 31,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: ico(icon, size: 19, color: fg),
+              ),
+              space(8),
+              tx(value, size: 20.48, weight: FontWeight.w700, height: 1),
+              space(3),
+              tx(
+                label,
+                size: 10.88,
+                color: const Color(0xff7a766d),
+                height: 1.2,
+              ),
+            ],
           ),
         ),
-      note('Los estados se consultan antes de confirmar cada operación.'),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        radius: 14,
+      );
+  Widget searchRow(
+    String hint, {
+    String? filterLabel,
+    VoidCallback? onFilter,
+    VoidCallback? onAdd,
+  }) => Row(
+    children: [
+      Expanded(
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 13),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: const Color(0xffdcd8cf)),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Row(
+            children: [
+              ico('search', size: 18, color: const Color(0xff8a867d)),
+              const SizedBox(width: 9),
+              Expanded(
+                child: TextField(
+                  controller: search,
+                  onChanged: (_) => setState(() {}),
+                  style: const TextStyle(fontSize: 13.12),
+                  decoration: InputDecoration(
+                    hintText: hint,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  ),
+                  textInputAction: TextInputAction.search,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(width: 9),
+      Semantics(
+        button: true,
+        label: onAdd != null ? 'Nuevo cliente' : filterLabel ?? 'Filtrar',
+        child: tap(
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: onAdd != null ? primaryGold : Colors.white,
+              border: onAdd != null
+                  ? null
+                  : Border.all(color: const Color(0xffdcd8cf)),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: ico(
+              onAdd != null ? 'plus' : 'list-filter',
+              size: onAdd != null ? 24 : 19,
+              color: onAdd != null ? Colors.white : const Color(0xff5f5c54),
+            ),
+          ),
+          onAdd ?? onFilter,
+        ),
+      ),
     ],
   );
-  Widget lots() {
-    final list = c.lots
+  Widget projects() {
+    final q = search.text.trim().toLowerCase();
+    final rows = c.projects
         .where(
-          (l) =>
-              (filter.isEmpty || l['estado'] == filter) &&
-              ('${l['codigo']}'.toLowerCase().contains(
-                search.text.toLowerCase(),
-              )),
+          (p) =>
+              ('${p['nombre']} ${p['ubicacion']}'.toLowerCase().contains(q)) &&
+              (projectLocation.isEmpty || p['ubicacion'] == projectLocation),
         )
         .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        title('Manzana ${c.block?['codigo']}'),
-        TextField(
-          controller: search,
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search),
-            hintText: 'Buscar número de lote',
-          ),
+        searchRow('Buscar proyecto', onFilter: filterProjects),
+        sectionTitle(
+          'Portafolio comercial',
+          overline:
+              '${rows.length} ${rows.length == 1 ? 'PROYECTO ACTIVO' : 'PROYECTOS ACTIVOS'}',
         ),
-        const SizedBox(height: 12),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (final s in [
-                '',
-                'DISPONIBLE',
-                'RESERVADO',
-                'VENDIDO',
-                'NO_DISPONIBLE',
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(right: 7),
-                  child: ChoiceChip(
-                    label: Text(
-                      s.isEmpty ? 'Todos' : stateLabel(s),
-                      style: const TextStyle(fontSize: 11),
+        for (final p in rows) ...[
+          tap(
+            Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: const Color(0xffdbd7ce)),
+                borderRadius: BorderRadius.circular(17),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0f201c14),
+                    blurRadius: 20,
+                    offset: Offset(0, 7),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  SizedBox(
+                    height: 200,
+                    child: ColoredBox(
+                      color: const Color(0xff23231f),
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            right: -74,
+                            top: -85,
+                            child: Transform.rotate(
+                              angle: .524,
+                              child: Container(
+                                width: 190,
+                                height: 190,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: gold.withValues(alpha: .45),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: -58,
+                            bottom: -72,
+                            child: Transform.rotate(
+                              angle: .524,
+                              child: Container(
+                                width: 130,
+                                height: 130,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: gold.withValues(alpha: .45),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 14,
+                            left: 14,
+                            child: Row(
+                              children: [
+                                ico(
+                                  'sparkles',
+                                  size: 15,
+                                  color: const Color(0xfff3dda2),
+                                ),
+                                const SizedBox(width: 6),
+                                tx(
+                                  'Proyecto activo',
+                                  size: 11.2,
+                                  color: const Color(0xfff3dda2),
+                                  weight: FontWeight.w700,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Center(
+                            child: Transform.rotate(
+                              angle: math.pi / 4,
+                              child: Container(
+                                width: 105,
+                                height: 105,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: const Color(0x6bd6a62d),
+                                  ),
+                                ),
+                                alignment: Alignment.center,
+                                child: Transform.rotate(
+                                  angle: -math.pi / 4,
+                                  child: ico(
+                                    'building-2',
+                                    size: 54,
+                                    color: const Color(0xffd6a62d),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 15,
+                            bottom: 15,
+                            child: Row(
+                              children: [
+                                ico(
+                                  'map-pin',
+                                  size: 15,
+                                  color: const Color(0xffcbc7bd),
+                                ),
+                                const SizedBox(width: 5),
+                                tx(
+                                  '${p['ubicacion'] ?? ''}',
+                                  size: 11.84,
+                                  color: const Color(0xffcbc7bd),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    selected: filter == s,
-                    onSelected: (_) => setState(() => filter = s),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 15, 16, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              tx(
+                                projectName(p['nombre']),
+                                size: 17.6,
+                                weight: FontWeight.w700,
+                              ),
+                              space(3),
+                              tx('Lotes residenciales', size: 12, color: muted),
+                            ],
+                          ),
+                        ),
+                        ico(
+                          'chevron-right',
+                          size: 21,
+                          color: const Color(0xff9c7104),
+                        ),
+                      ],
+                    ),
+                  ),
+                  space(8),
+                  Container(
+                    decoration: const BoxDecoration(
+                      border: PrototypeBorder(
+                        top: BorderSide(color: Color(0xffebe8e1)),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        for (final pair in [
+                          (p['manzanas'] ?? 0, 'manzanas'),
+                          (p['lotes'] ?? 0, 'lotes'),
+                          (p['disponibles'] ?? 0, 'disponibles'),
+                        ])
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 12,
+                                horizontal: 8,
+                              ),
+                              child: Column(
+                                children: [
+                                  tx(
+                                    '${pair.$1}',
+                                    size: 14.72,
+                                    weight: FontWeight.w700,
+                                  ),
+                                  space(2),
+                                  tx(pair.$2, size: 10.56, color: muted),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            () => run(() => c.selectProject(p)),
+            label: projectName(p['nombre']),
+            radius: 17,
+          ),
+          space(12),
+        ],
+        if (rows.isEmpty) empty('No se encontraron proyectos.'),
+        infoNote(
+          'La disponibilidad se valida nuevamente antes de confirmar una separación.',
+        ),
+      ],
+    );
+  }
+
+  Widget blocks() {
+    final available = c.blocks.fold<num>(
+      0,
+      (a, b) => a + (b['disponibles'] as num? ?? 0),
+    );
+    final total = c.blocks.fold<num>(
+      0,
+      (a, b) => a + (b['total'] as num? ?? 0),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        uiBox(
+          Row(
+            children: [
+              ico('map-pin', color: const Color(0xffa07508)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    tx(
+                      '${c.project?['ubicacion'] ?? ''}',
+                      size: 13.6,
+                      weight: FontWeight.w700,
+                    ),
+                    space(2),
+                    tx(
+                      '$available de $total lotes disponibles',
+                      size: 11.52,
+                      color: const Color(0xff7c786f),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(14),
+        ),
+        sectionTitle('Manzanas', overline: 'SELECCIÓN DE UBICACIÓN'),
+        LayoutBuilder(
+          builder: (context, constraints) => Wrap(
+            spacing: 11,
+            runSpacing: 11,
+            children: [
+              for (final b in c.blocks)
+                SizedBox(
+                  width: (constraints.maxWidth - 11) / 2,
+                  child: tap(
+                    uiBox(
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 94),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: charcoal,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: tx(
+                                '${b['codigo']}',
+                                size: 17.28,
+                                color: const Color(0xffd6a62d),
+                                weight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  tx(
+                                    'Manzana ${b['codigo']}',
+                                    size: 12.64,
+                                    weight: FontWeight.w700,
+                                  ),
+                                  space(2),
+                                  tx(
+                                    '${b['total']} lotes',
+                                    size: 10.88,
+                                    color: const Color(0xff817d73),
+                                  ),
+                                  space(7),
+                                  tx(
+                                    '${b['disponibles']} disp.',
+                                    size: 10.56,
+                                    color: (b['disponibles'] as num? ?? 0) > 0
+                                        ? const Color(0xff2d7041)
+                                        : const Color(0xff8a867d),
+                                    weight: FontWeight.w800,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      padding: const EdgeInsets.all(13),
+                      line: b['codigo'] == 'B' ? gold : border,
+                      color: b['codigo'] == 'B'
+                          ? const Color(0xfffffaf0)
+                          : Colors.white,
+                      radius: 14,
+                    ),
+                    () => run(() => c.selectBlock(b)),
+                    label: 'Manzana ${b['codigo']}',
+                    radius: 14,
                   ),
                 ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        for (final l in list)
-          InkWell(
-            onTap: () => run(() => c.selectLot(l)),
-            child: box(
-              Row(
+        space(18),
+        uiBox(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              tx('Estados', size: 12.32, weight: FontWeight.w700),
+              space(10),
+              Wrap(
+                spacing: 14,
+                runSpacing: 8,
                 children: [
-                  Container(
-                    width: 54,
-                    height: 62,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: const Color(0xfff5e8bb),
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    child: Text(
-                      '${l['codigo']}',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  for (final row in [
+                    ('Disponible', const Color(0xff2f8a4e)),
+                    ('Reservado', const Color(0xff2c6da4)),
+                    ('Vendido', const Color(0xffb36b1b)),
+                    ('No disponible', const Color(0xff9a9a94)),
+                  ])
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          'Lote ${l['codigo']}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: row.$2,
+                            shape: BoxShape.circle,
+                          ),
                         ),
-                        Text(
-                          '${l['area_m2']} m²',
-                          style: const TextStyle(color: muted, fontSize: 12),
+                        const SizedBox(width: 6),
+                        tx(row.$1, size: 10.72, color: const Color(0xff69665e)),
+                      ],
+                    ),
+                ],
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(14),
+        ),
+      ],
+    );
+  }
+
+  Widget chipButton(String title, bool active, VoidCallback onTap) => Semantics(
+    button: true,
+    selected: active,
+    label: title,
+    child: tap(
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: active ? charcoal : Colors.white,
+          border: Border.all(
+            color: active ? charcoal : const Color(0xffdedad1),
+          ),
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: tx(
+          title,
+          size: 11.2,
+          color: active ? Colors.white : const Color(0xff6d6961),
+          weight: FontWeight.w700,
+        ),
+      ),
+      onTap,
+      radius: 99,
+    ),
+  );
+  Widget lots() {
+    final q = search.text.trim().toLowerCase();
+    final rows = c.lots.where((l) {
+      return '${l['codigo']}'.toLowerCase().contains(q) &&
+          (chip != 'Disponibles' || l['estado'] == 'DISPONIBLE') &&
+          (!['Parque', 'Avenida'].contains(chip) ||
+              '${l['referencia'] ?? ''}'.toLowerCase().contains(
+                chip.toLowerCase(),
+              )) &&
+          (filterState.isEmpty || l['estado'] == filterState) &&
+          (filterLocation.isEmpty ||
+              '${l['referencia'] ?? ''}'.toLowerCase().contains(
+                filterLocation.toLowerCase(),
+              )) &&
+          (filterStage == null || l['etapa_id'] == filterStage);
+    }).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        searchRow(
+          'Buscar número de lote',
+          filterLabel: 'Filtrar lotes',
+          onFilter: filterLots,
+        ),
+        space(12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final name in ['Todos', 'Disponibles', 'Parque', 'Avenida'])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: chipButton(
+                    name,
+                    chip == name,
+                    () => setState(() => chip = name),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(1, 12, 1, 9),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            alignment: WrapAlignment.spaceBetween,
+            children: [
+              tx(
+                '${rows.length} lotes mostrados',
+                size: 11.84,
+                weight: FontWeight.w700,
+              ),
+              tx(
+                'Precio actualizado',
+                size: 10.56,
+                color: const Color(0xff7f7b72),
+              ),
+            ],
+          ),
+        ),
+        for (final l in rows) ...[lotCard(l), space(9)],
+        if (rows.isEmpty) empty('No se encontraron lotes para estos filtros.'),
+      ],
+    );
+  }
+
+  Widget lotCard(Data l) {
+    final disabled = l['estado'] != 'DISPONIBLE';
+    return Opacity(
+      opacity: disabled ? .73 : 1,
+      child: tap(
+        uiBox(
+          Row(
+            children: [
+              lotNumber(l),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: tx(
+                            'Lote ${l['codigo']}',
+                            size: 13.76,
+                            weight: FontWeight.w700,
+                          ),
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          money(l['precio']),
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        statusBadge(l['estado']),
+                      ],
+                    ),
+                    space(5),
+                    Row(
+                      children: [
+                        ico(
+                          'map-pin',
+                          size: 14,
+                          color: const Color(0xff7d7970),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: tx(
+                            '${l['referencia'] ?? l['etapa'] ?? ''} · ${num.tryParse('${l['area_m2']}')?.toStringAsFixed(2) ?? ''} m²',
+                            size: 10.56,
+                            color: const Color(0xff7d7970),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  badge(l['estado']),
-                ],
+                    space(7),
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      children: [
+                        tx(
+                          money(l['precio']),
+                          size: 12.48,
+                          weight: FontWeight.w700,
+                        ),
+                        tx(
+                          'Inicial ${money(l['inicial'])}',
+                          size: 9.76,
+                          color: muted,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
+              if (!disabled) ...[
+                const SizedBox(width: 8),
+                ico('chevron-right'),
+              ],
+            ],
           ),
-        if (list.isEmpty) note('No se encontraron lotes con estos filtros.'),
-      ],
+          padding: const EdgeInsets.all(11),
+          color: disabled ? const Color(0xfff1f0ec) : Colors.white,
+        ),
+        disabled && !c.admin ? null : () => run(() => c.selectLot(l)),
+        label: 'Lote ${l['codigo']}',
+      ),
     );
   }
 
   Widget detail() {
     final l = c.lot!;
+    final initial = num.tryParse('${plan['inicial'] ?? l['inicial']}') ?? 0;
+    final price = num.tryParse('${l['precio']}') ?? 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              '${l['proyecto']}',
-              style: const TextStyle(
-                color: Color(0xff9a7006),
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: charcoal,
+            borderRadius: BorderRadius.circular(16),
+            border: const PrototypeBorder(
+              bottom: BorderSide(color: gold, width: 3),
             ),
-            badge(l['estado']),
-          ],
-        ),
-        title('Manzana ${l['manzana']} · Lote ${l['codigo']}'),
-        box(
-          Column(
+          ),
+          child: Column(
             children: [
-              pair('Área', '${l['area_m2']} m²'),
-              pair('Etapa', '${l['etapa']}'),
-              pair('Precio al contado', money(l['precio'])),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        tx(
+                          'MANZANA ${l['manzana']}',
+                          size: 10.56,
+                          color: const Color(0xffd4a731),
+                          weight: FontWeight.w800,
+                          spacing: 1.6,
+                        ),
+                        space(4),
+                        tx(
+                          'Lote $lotCode',
+                          size: 28,
+                          color: Colors.white,
+                          height: 1.15,
+                        ),
+                      ],
+                    ),
+                  ),
+                  statusBadge(l['estado']),
+                ],
+              ),
+              space(17),
+              Row(
+                children: [
+                  Expanded(
+                    child: feature(
+                      'map-pin',
+                      'Ubicación',
+                      '${l['referencia'] ?? l['etapa'] ?? ''}',
+                    ),
+                  ),
+                  const SizedBox(width: 1),
+                  Expanded(
+                    child: feature('layout-grid', 'Área', '${l['area_m2']} m²'),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
-        title('Planes de pago'),
-        for (final p in (l['planes'] as List))
-          box(
-            Column(
-              children: [
-                pair('${p['nombre']}', '${p['numero_cuotas']} cuotas'),
-                pair('Inicial', money(p['inicial'])),
-                pair('Cuota', money(p['monto_cuota'])),
-              ],
-            ),
+        space(13),
+        uiBox(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              eyebrow('PRECIO AL CONTADO'),
+              space(5),
+              Row(
+                children: [
+                  Expanded(
+                    child: tx(
+                      money(price),
+                      size: 22.72,
+                      weight: FontWeight.w700,
+                      spacing: -.7,
+                    ),
+                  ),
+                  ico('badge-check', size: 22, color: const Color(0xff2d7944)),
+                ],
+              ),
+              space(13),
+              const Divider(height: 1, color: Color(0xffebe8e1)),
+              space(12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        tx(
+                          'Inicial',
+                          size: 10.56,
+                          color: const Color(0xff7d7970),
+                        ),
+                        space(2),
+                        tx(money(initial), size: 12.8, weight: FontWeight.w700),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.only(left: 14),
+                      decoration: const BoxDecoration(
+                        border: PrototypeBorder(
+                          left: BorderSide(color: Color(0xffebe8e1)),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          tx(
+                            'Saldo',
+                            size: 10.56,
+                            color: const Color(0xff7d7970),
+                          ),
+                          space(2),
+                          tx(
+                            money(price - initial),
+                            size: 12.8,
+                            weight: FontWeight.w700,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        button(
-          'Separar este lote',
-          l['estado'] == 'DISPONIBLE'
-              ? () => run(() async {
-                  clearClient();
-                  go('client-form');
-                })
-              : null,
-          icon: Icons.key_outlined,
+          padding: const EdgeInsets.all(15),
+          radius: 14,
         ),
-        OutlinedButton.icon(
-          onPressed: () => run(() async {
-            card = await c.api.bytes('/lots/${l['id']}/card.png');
-            go('commercial-sheet');
-          }),
-          icon: const Icon(Icons.description_outlined),
-          label: const Text('Generar ficha comercial'),
+        sectionTitle(
+          'Planes de pago',
+          action: 'Ver condiciones',
+          onAction: conditions,
         ),
-        TextButton.icon(
-          onPressed: () => showHistory(l['id']),
-          icon: const Icon(Icons.history),
-          label: const Text('Ver historial'),
-        ),
-        if (c.admin && ['DISPONIBLE', 'NO_DISPONIBLE'].contains(l['estado']))
-          TextButton(
-            onPressed: () => run(() async {
-              final reason = await prompt('Motivo del cambio');
-              if (reason == null) return;
-              await c.api.call('PATCH', '/lots/${l['id']}/state', {
-                'estado': l['estado'] == 'DISPONIBLE'
-                    ? 'NO_DISPONIBLE'
-                    : 'DISPONIBLE',
-                'motivo': reason,
-              });
-              await c.selectLot(l);
-            }),
-            child: Text(
-              l['estado'] == 'DISPONIBLE'
-                  ? 'Deshabilitar lote'
-                  : 'Reactivar lote',
-            ),
+        LayoutBuilder(
+          builder: (context, constraints) => Wrap(
+            spacing: 9,
+            runSpacing: 9,
+            children: [
+              for (final p in plans)
+                SizedBox(
+                  width: (constraints.maxWidth - 9) / 2,
+                  child: tap(
+                    uiBox(
+                      Stack(
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              tx(
+                                '${p['numero_cuotas']} meses',
+                                size: 10.4,
+                                color: const Color(0xff6e6a62),
+                              ),
+                              space(2),
+                              tx(
+                                money(p['monto_cuota']),
+                                size: 13.28,
+                                weight: FontWeight.w700,
+                              ),
+                              tx(
+                                'cuota mensual',
+                                size: 9.44,
+                                color: const Color(0xff8a867d),
+                              ),
+                            ],
+                          ),
+                          if (p['id'] == plan['id'])
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: ico(
+                                'check',
+                                size: 15,
+                                color: const Color(0xffa47502),
+                              ),
+                            ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 10,
+                      ),
+                      radius: 11,
+                      color: p['id'] == plan['id']
+                          ? const Color(0xfffff8e5)
+                          : Colors.white,
+                      line: p['id'] == plan['id']
+                          ? const Color(0xffbf8c0d)
+                          : border,
+                    ),
+                    () => setState(() => c.selectedPlan = p),
+                    label: '${p['numero_cuotas']} meses',
+                  ),
+                ),
+            ],
           ),
-        note(
-          'La disponibilidad se valida nuevamente al confirmar la separación.',
+        ),
+        space(18),
+        Row(
+          children: [
+            Expanded(
+              flex: 72,
+              child: primary(
+                'Ficha',
+                () => go('commercial-sheet'),
+                before: 'share-2',
+                outline: true,
+              ),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              flex: 128,
+              child: primary(
+                'Separar lote',
+                l['estado'] == 'DISPONIBLE' && plans.isNotEmpty
+                    ? newClient
+                    : null,
+                before: 'key-round',
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget commercialCard() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      title('Ficha para tu cliente'),
-      if (card != null)
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.memory(card!),
-        ),
-      const SizedBox(height: 12),
-      button(
-        kIsWeb ? 'Guardar ficha' : 'Compartir ficha',
-        () => run(() async {
-          await share(card!, 'ficha_comercial.png', 'image/png');
-        }),
-        icon: Icons.share_outlined,
-      ),
-      note(
-        'La ficha incluye únicamente información comercial. Confirma la disponibilidad antes de reservar.',
-      ),
-    ],
-  );
-  void clearClient() {
-    for (final f in [names, surnames, document, phone, mail]) {
-      f.clear();
-    }
-    c.selectedClient = null;
-    c.documents = [];
-    confirmed = false;
-  }
-
-  Widget steps(int current) => Padding(
-    padding: const EdgeInsets.only(bottom: 18),
+  Widget feature(String icon, String label, String value) => Container(
+    padding: const EdgeInsets.all(11),
+    color: const Color(0xff292924),
     child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (int i = 0; i < 4; i++)
-          Column(
+        ico(icon, size: 18, color: const Color(0xffd4a731)),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: i <= current ? gold : const Color(0xffe8e4dc),
-                child: Text(
-                  '${i + 1}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: i <= current ? Colors.white : muted,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                ['Cliente', 'DNI', 'Separación', 'Confirmar'][i],
-                style: const TextStyle(fontSize: 10, color: muted),
+              tx(label, size: 9.76, color: const Color(0xffaaa79f)),
+              space(1),
+              tx(
+                value,
+                size: 12.16,
+                color: Colors.white,
+                weight: FontWeight.w700,
               ),
             ],
           ),
+        ),
       ],
     ),
   );
+  Widget commercial() {
+    final l = c.lot!,
+        initial = num.tryParse('${plan['inicial']}') ?? 0,
+        price = num.tryParse('${l['precio']}') ?? 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        RepaintBoundary(
+          key: sheetKey,
+          child: Container(
+            color: const Color(0xffece9e1),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: const Color(0xffd7d2c8)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x1a1f1b13),
+                    blurRadius: 22,
+                    offset: Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: const BoxDecoration(
+                      color: ink,
+                      border: PrototypeBorder(
+                        bottom: BorderSide(color: gold, width: 3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        brand(compact: true),
+                        tx(
+                          dateText(DateTime.now()),
+                          size: 10.4,
+                          color: const Color(0xffbdb9af),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 13),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        tx(
+                          '${l['proyecto']} · ${l['ubicacion'] ?? ''}'
+                              .toUpperCase(),
+                          size: 10.4,
+                          color: const Color(0xffa17300),
+                          weight: FontWeight.w800,
+                          spacing: 1.6,
+                        ),
+                        space(5),
+                        tx(
+                          'Manzana ${l['manzana']} · Lote $lotCode',
+                          size: 20.8,
+                          weight: FontWeight.w700,
+                        ),
+                        space(4),
+                        tx(
+                          '${l['referencia'] ?? ''} · ${l['area_m2']} m²',
+                          size: 12.16,
+                          color: muted,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    color: const Color(0xfffff6d9),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        tx(
+                          'Precio del lote',
+                          size: 10.4,
+                          color: const Color(0xff745c1d),
+                        ),
+                        space(3),
+                        tx(
+                          money(price),
+                          size: 24.8,
+                          weight: FontWeight.w700,
+                          spacing: -.7,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(child: sheetValue('Inicial', money(initial))),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.only(left: 16),
+                            decoration: const BoxDecoration(
+                              border: PrototypeBorder(
+                                left: BorderSide(color: Color(0xffe0ddd4)),
+                              ),
+                            ),
+                            child: sheetValue('Saldo', money(price - initial)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    padding: const EdgeInsets.all(13),
+                    decoration: const BoxDecoration(
+                      color: charcoal,
+                      border: PrototypeBorder(
+                        left: BorderSide(color: gold, width: 3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              tx(
+                                'PLAN SUGERIDO',
+                                size: 9.6,
+                                color: const Color(0xffd6aa39),
+                                weight: FontWeight.w800,
+                                spacing: 1.3,
+                              ),
+                              space(4),
+                              tx(
+                                '${plan['numero_cuotas']} cuotas de ${money(plan['monto_cuota'])}',
+                                size: 13.12,
+                                color: Colors.white,
+                                weight: FontWeight.w700,
+                              ),
+                            ],
+                          ),
+                        ),
+                        ico(
+                          'calendar-days',
+                          size: 27,
+                          color: const Color(0xffd6aa39),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                    child: Row(
+                      children: [
+                        avatar(userName),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              tx('Tu asesor', size: 9.92, color: muted),
+                              tx(
+                                userName,
+                                size: 12.48,
+                                weight: FontWeight.w700,
+                              ),
+                              if ('${c.user?['phone'] ?? ''}'.isNotEmpty) ...[
+                                space(3),
+                                Row(
+                                  children: [
+                                    ico('phone', size: 13, color: muted),
+                                    const SizedBox(width: 4),
+                                    tx(
+                                      '${c.user!['phone']}',
+                                      size: 9.92,
+                                      color: muted,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    color: const Color(0xfff1f0ec),
+                    child: tx(
+                      'Información sujeta a actualización. La disponibilidad se confirma al registrar la separación.',
+                      size: 9.6,
+                      color: muted,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        space(15),
+        primary(
+          'Compartir por WhatsApp',
+          () => shareBoundary(sheetKey, 'ficha_comercial.png', whatsapp: true),
+          before: 'message-circle-more',
+          color: const Color(0xff287a49),
+        ),
+      ],
+    );
+  }
+
+  Widget sheetValue(String label, String value) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      tx(label, size: 10.4, color: muted),
+      space(3),
+      tx(value, size: 13.12, weight: FontWeight.w700),
+    ],
+  );
+  Future<void> shareBoundary(
+    GlobalKey key,
+    String name, {
+    bool whatsapp = false,
+  }) => run(() async {
+    await WidgetsBinding.instance.endOfFrame;
+    final boundary =
+        key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) throw ApiException('No se pudo preparar la imagen.');
+    final image = await boundary.toImage(pixelRatio: 3);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    if (data == null) throw ApiException('No se pudo preparar la imagen.');
+    await (whatsapp
+        ? files.shareWhatsApp(data.buffer.asUint8List(), name, 'image/png')
+        : files.shareFile(data.buffer.asUint8List(), name, 'image/png'));
+    if (kIsWeb) {
+      message(
+        'Imagen preparada. Si tu navegador no permite compartir, adjunta la descarga en WhatsApp.',
+      );
+    }
+  });
+  Widget empty(String text) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 24),
+    child: tx(text, size: 13, color: muted, align: TextAlign.center),
+  );
+  //__PART2__
+  Widget steps(int current) => Padding(
+    padding: const EdgeInsets.only(bottom: 18),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 45),
+      child: Stack(
+        children: [
+          const Positioned(
+            left: 48,
+            right: 48,
+            top: 13,
+            child: Divider(height: 1, color: Color(0xffd9d5cc)),
+          ),
+          Row(
+            children: [
+              for (int i = 1; i <= 4; i++)
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 27,
+                        height: 27,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: i <= current ? gold : const Color(0xffeceae4),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: i <= current
+                                ? gold
+                                : const Color(0xffd8d4cb),
+                          ),
+                        ),
+                        child: i < current
+                            ? ico('check', size: 13, color: Colors.white)
+                            : tx(
+                                '$i',
+                                size: 10.4,
+                                color: i <= current
+                                    ? Colors.white
+                                    : const Color(0xff949087),
+                                weight: FontWeight.w800,
+                              ),
+                      ),
+                      space(4),
+                      tx(
+                        ['Cliente', 'Documentos', 'Separación', 'Confirmar'][i -
+                            1],
+                        size: 8.8,
+                        color: i <= current
+                            ? const Color(0xff8f6806)
+                            : const Color(0xff949087),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+  String? dniValidator(String? value) =>
+      RegExp(r'^\d{8}$').hasMatch((value ?? '').trim())
+      ? null
+      : 'Ingresa un DNI de 8 dígitos.';
+  String? phoneValidator(String? value) =>
+      RegExp(r'^[0-9+ ()-]{6,25}$').hasMatch((value ?? '').trim())
+      ? null
+      : 'Ingresa un teléfono válido.';
+  String? mailValidator(String? value) =>
+      value == null ||
+          value.trim().isEmpty ||
+          RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value.trim())
+      ? null
+      : 'Revisa el correo.';
+  Widget personFields({bool co = false}) {
+    final n = co ? coNames : names,
+        d = co ? coDocument : document,
+        p = co ? coPhone : phone,
+        a = co ? coAddress : address,
+        m = co ? coMail : mail,
+        o = co ? coOccupation : occupation;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        field('Nombres y apellidos', n, required: true),
+        space(12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: field(
+                'DNI',
+                d,
+                keyboard: TextInputType.number,
+                validate: dniValidator,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: field(
+                'Teléfono',
+                p,
+                keyboard: TextInputType.phone,
+                validate: phoneValidator,
+              ),
+            ),
+          ],
+        ),
+        space(12),
+        field('Dirección', a),
+        space(12),
+        field(
+          'Correo',
+          m,
+          keyboard: TextInputType.emailAddress,
+          validate: mailValidator,
+        ),
+        space(12),
+        field('Ocupación', o),
+      ],
+    );
+  }
+
+  Future<void> editCo() async {
+    final key = GlobalKey<FormState>();
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: paper,
+      showDragHandle: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          0,
+          20,
+          MediaQuery.viewInsetsOf(ctx).bottom + 20,
+        ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(ctx).height * .8,
+          ),
+          child: SingleChildScrollView(
+            child: Form(
+              key: key,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  sectionTitle('Datos del cotitular', top: 0),
+                  infoNote(
+                    'Usa los datos tal como aparecen en el DNI.',
+                    compact: true,
+                  ),
+                  space(14),
+                  personFields(co: true),
+                  space(18),
+                  primary('Guardar cotitular', () {
+                    if (key.currentState!.validate()) {
+                      if (coDocument.text.trim() == document.text.trim()) {
+                        message(
+                          'El titular y cotitular deben tener un DNI diferente.',
+                        );
+                        return;
+                      }
+                      Navigator.pop(ctx, true);
+                    }
+                  }, after: 'check'),
+                  space(6),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Cancelar'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (mounted) {
+      setState(() {
+        if (saved != true && coNames.text.trim().isEmpty) withCo = false;
+      });
+    }
+  }
+
+  Data personInput({bool co = false}) => {
+    'nombre': (co ? coNames : names).text.trim(),
+    'tipo_documento': 'DNI',
+    'numero_documento': (co ? coDocument : document).text.trim(),
+    'telefono': (co ? coPhone : phone).text.trim(),
+    'correo': (co ? coMail : mail).text.trim(),
+    'direccion': (co ? coAddress : address).text.trim(),
+    'ocupacion': (co ? coOccupation : occupation).text.trim(),
+  };
   Widget clientForm() => Form(
     key: clientKey,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (c.lot != null) steps(0),
-        title('Datos del cliente'),
-        if (c.lot != null)
-          TextButton.icon(
-            onPressed: () => go('clients'),
-            icon: const Icon(Icons.person_search),
-            label: const Text('Seleccionar cliente existente'),
+        if (c.lot != null) steps(1),
+        sectionTitle(
+          'Datos del titular',
+          overline: c.lot == null ? 'REGISTRO COMERCIAL' : 'PASO 1 DE 4',
+          top: 0,
+        ),
+        infoNote('Usa los datos tal como aparecen en el DNI.', compact: true),
+        space(14),
+        personFields(),
+        space(16),
+        uiBox(
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    tx(
+                      'Agregar cotitular',
+                      size: 12.48,
+                      weight: FontWeight.w700,
+                    ),
+                    space(2),
+                    tx(
+                      'Opcional para esta operación',
+                      size: 10.4,
+                      color: const Color(0xff817d74),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 36,
+                height: 24,
+                child: Transform.scale(
+                  scale: .65,
+                  child: Switch(
+                    value: withCo,
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: primaryGold,
+                    inactiveTrackColor: const Color(0xffdad6cc),
+                    onChanged: (v) {
+                      setState(() => withCo = v);
+                      if (v) editCo();
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
-        note('Los datos personales se utilizan para la atención comercial.'),
-        field('Nombres', names),
-        field('Apellidos', surnames),
-        DropdownButtonFormField<String>(
-          initialValue: type,
-          decoration: const InputDecoration(labelText: 'Tipo de documento'),
-          items: const [
-            DropdownMenuItem(value: 'DNI', child: Text('DNI')),
-            DropdownMenuItem(value: 'CE', child: Text('Carné de extranjería')),
-          ],
-          onChanged: (v) => setState(() => type = v!),
+          radius: 12,
         ),
-        const SizedBox(height: 14),
-        field('Número de documento', document, keyboard: TextInputType.text),
-        field('Teléfono', phone, keyboard: TextInputType.phone),
-        field(
-          'Correo electrónico',
-          mail,
-          mandatory: false,
-          keyboard: TextInputType.emailAddress,
-        ),
-        button(
-          c.lot == null ? 'Guardar cliente' : 'Guardar y continuar',
+        if (withCo) ...[
+          space(9),
+          tap(
+            uiBox(
+              Row(
+                children: [
+                  ico('users-round', size: 19, color: const Color(0xff735918)),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        tx(
+                          coNames.text.trim().isEmpty
+                              ? 'Datos del cotitular'
+                              : coNames.text.trim(),
+                          size: 11.52,
+                          color: const Color(0xff735918),
+                          weight: FontWeight.w700,
+                        ),
+                        space(2),
+                        tx(
+                          coDocument.text.trim().isEmpty
+                              ? 'Se solicitarán sus datos y ambas caras del DNI.'
+                              : 'DNI ${coDocument.text.trim()} · Editar datos',
+                          size: 9.76,
+                          color: const Color(0xff735918),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ico('check', size: 18, color: const Color(0xff735918)),
+                ],
+              ),
+              color: const Color(0xfffff7de),
+              line: const Color(0xffe8d28d),
+              padding: const EdgeInsets.all(11),
+              radius: 11,
+            ),
+            editCo,
+          ),
+        ],
+        space(17),
+        primary(
+          c.lot == null ? 'Guardar cliente' : 'Continuar',
           () => run(() async {
             if (!clientKey.currentState!.validate()) return;
+            if (withCo &&
+                (coNames.text.trim().isEmpty ||
+                    dniValidator(coDocument.text) != null ||
+                    phoneValidator(coPhone.text) != null)) {
+              await editCo();
+              return;
+            }
             if (c.projects.isEmpty) {
               throw ApiException('No hay proyectos registrados.');
             }
             await c.saveClient({
-              'nombre': '${names.text.trim()} ${surnames.text.trim()}',
-              'tipo_documento': type,
-              'numero_documento': document.text.trim(),
-              'telefono': phone.text.trim(),
-              'correo': mail.text.trim(),
+              ...personInput(),
               'proyecto_id': c.project?['id'] ?? c.projects.first['id'],
+              if (withCo) 'cotitular': personInput(co: true),
             });
           }),
-          icon: Icons.arrow_forward,
+          after: 'arrow-right',
         ),
       ],
     ),
@@ -1116,143 +2555,459 @@ class _CasaViewState extends State<CasaView> {
   Widget documents() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      steps(1),
-      title('Fotografías del documento'),
-      Text(
-        '${c.selectedClient?['nombre']}',
-        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+      steps(2),
+      sectionTitle('Fotografías del DNI', overline: 'PASO 2 DE 4', top: 0),
+      tx(
+        'Verifica que los datos y la fotografía sean legibles antes de continuar.',
+        size: 14.24,
+        color: const Color(0xff716e66),
+        height: 1.45,
       ),
-      note(
-        'Carga opcional para esta separación. Solo PNG o JPEG de hasta 5 MB. Las imágenes permanecen privadas.',
-      ),
-      for (final side in ['ANVERSO', 'REVERSO'])
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: OutlinedButton(
-            onPressed: () => run(() async {
-              final f = await pickImage();
-              if (f == null) return;
-              if (f.bytes.length > 5 * 1024 * 1024) {
-                throw ApiException('Selecciona una imagen de hasta 5 MB.');
-              }
-              await c.upload(side, f.bytes, f.name);
-            }),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Row(
+      space(15),
+      for (final group in [false, if (c.coClient != null) true])
+        for (final side in ['ANVERSO', 'REVERSO']) ...[
+          documentCard(group, side),
+          space(9),
+        ],
+      if (c.coClient != null) ...[
+        space(3),
+        infoNote(
+          'Al incluir cotitular se solicitan los documentos de ambas personas.',
+          compact: true,
+          icon: 'users-round',
+        ),
+      ],
+      space(13),
+      Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: charcoal,
+          borderRadius: BorderRadius.circular(12),
+          border: const PrototypeBorder(
+            left: BorderSide(color: gold, width: 3),
+          ),
+        ),
+        child: Row(
+          children: [
+            ico('camera', size: 26, color: const Color(0xffd1a12a)),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    c.documents.any((d) => d['lado'] == side)
-                        ? Icons.check_circle_outline
-                        : Icons.add_a_photo_outlined,
-                    color: gold,
+                  tx(
+                    'Buena captura',
+                    size: 12,
+                    color: Colors.white,
+                    weight: FontWeight.w700,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '${side == 'ANVERSO' ? 'Anverso' : 'Reverso'} del documento',
+                  space(3),
+                  tx(
+                    'Documento completo, sin reflejos y con suficiente iluminación.',
+                    size: 9.92,
+                    color: const Color(0xffbbb8b0),
+                    height: 1.35,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      space(17),
+      primary('Continuar', () {
+        final needed = [c.documents, if (c.coClient != null) c.coDocuments];
+        if (needed.any(
+          (group) =>
+              !group.any((d) => d['lado'] == 'ANVERSO') ||
+              !group.any((d) => d['lado'] == 'REVERSO'),
+        )) {
+          message('Completa ambas caras del DNI antes de continuar.');
+          return;
+        }
+        go('separation');
+      }, after: 'arrow-right'),
+    ],
+  );
+  Widget documentCard(bool co, String side) {
+    final uploaded = (co ? c.coDocuments : c.documents).any(
+      (d) => d['lado'] == side,
+    );
+    final person = c.coClient == null
+        ? ''
+        : co
+        ? ' cotitular'
+        : ' titular';
+    final label = 'DNI$person · ${side == 'ANVERSO' ? 'Anverso' : 'Reverso'}';
+    return tap(
+      uiBox(
+        Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: uploaded
+                    ? const Color(0xffdcefe1)
+                    : const Color(0xfff1eee7),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: ico(
+                uploaded ? 'check' : 'camera',
+                size: 22,
+                color: uploaded
+                    ? const Color(0xff28713d)
+                    : const Color(0xff9a7006),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  tx(label, size: 12, weight: FontWeight.w700),
+                  space(3),
+                  tx(
+                    uploaded
+                        ? 'Imagen cargada correctamente'
+                        : 'Toca para tomar o elegir una foto',
+                    size: 9.92,
+                    color: const Color(0xff7d7970),
+                  ),
+                ],
+              ),
+            ),
+            ico('chevron-right', size: 19, color: muted),
+          ],
+        ),
+        padding: const EdgeInsets.all(12),
+        color: uploaded ? const Color(0xfff3f8f4) : Colors.white,
+        line: uploaded ? const Color(0xffbdd8c4) : const Color(0xffcfcac0),
+        radius: 12,
+      ),
+      () => run(() async {
+        final f = await files.pickImage();
+        if (f == null) return;
+        if (f.bytes.length > 5 * 1024 * 1024) {
+          throw ApiException('Selecciona una imagen de hasta 5 MB.');
+        }
+        await c.upload(side, f.bytes, f.name, cotitular: co);
+      }),
+      label: label,
+    );
+  }
+
+  Widget separation() {
+    final l = c.lot!,
+        price = num.tryParse('${l['precio']}') ?? 0,
+        initial = num.tryParse('${plan['inicial']}') ?? 0;
+    return Form(
+      key: separationKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          steps(3),
+          sectionTitle(
+            'Condiciones acordadas',
+            overline: 'PASO 3 DE 4',
+            top: 0,
+          ),
+          uiBox(
+            Row(
+              children: [
+                lotNumber(l, small: true),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      tx(projectTitle, size: 12.16, weight: FontWeight.w700),
+                      space(3),
+                      tx(
+                        '${l['referencia'] ?? ''} · ${l['area_m2']} m²',
+                        size: 10.08,
+                        color: const Color(0xff7d7970),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                tx(money(price), size: 11.84, weight: FontWeight.w700),
+              ],
+            ),
+            padding: const EdgeInsets.all(12),
+            radius: 12,
+          ),
+          space(15),
+          field(
+            'Monto de separación',
+            amount,
+            required: true,
+            keyboard: const TextInputType.numberWithOptions(decimal: true),
+          ),
+          space(15),
+          tx(
+            'Plan de financiamiento',
+            size: 12.64,
+            weight: FontWeight.w700,
+            color: const Color(0xff3a3935),
+          ),
+          space(8),
+          Row(
+            children: [
+              for (int i = 0; i < plans.length; i++) ...[
+                if (i > 0) const SizedBox(width: 7),
+                Expanded(
+                  child: tap(
+                    uiBox(
+                      Column(
+                        children: [
+                          tx(
+                            '${plans[i]['numero_cuotas']}',
+                            size: 13.12,
+                            weight: FontWeight.w700,
+                            color: plans[i]['id'] == plan['id']
+                                ? const Color(0xff7b5904)
+                                : const Color(0xff55524b),
+                          ),
+                          tx(
+                            'meses',
+                            size: 9.12,
+                            color: plans[i]['id'] == plan['id']
+                                ? const Color(0xff7b5904)
+                                : const Color(0xff55524b),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 9,
+                      ),
+                      radius: 9,
+                      color: plans[i]['id'] == plan['id']
+                          ? const Color(0xfffff6da)
+                          : Colors.white,
+                      line: plans[i]['id'] == plan['id']
+                          ? primaryGold
+                          : const Color(0xffd8d4cb),
                     ),
+                    () => setState(() => c.selectedPlan = plans[i]),
+                    label: '${plans[i]['numero_cuotas']} meses',
                   ),
-                  Text(
-                    c.documents.any((d) => d['lado'] == side)
-                        ? 'Cargado'
-                        : 'Adjuntar',
-                    style: const TextStyle(fontSize: 11),
+                ),
+              ],
+            ],
+          ),
+          space(14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xffdedad1)),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  paymentRow('Precio del lote', money(price)),
+                  paymentRow('Inicial', money(initial)),
+                  paymentRow('Saldo financiado', money(price - initial)),
+                  paymentRow(
+                    'Cuota mensual',
+                    money(plan['monto_cuota']),
+                    highlight: true,
                   ),
                 ],
               ),
             ),
           ),
-        ),
-      note(
-        'Asegúrate de que el documento se vea completo y sea legible.',
-        icon: Icons.camera_alt_outlined,
-      ),
-      button('Continuar', () => go('separation'), icon: Icons.arrow_forward),
-    ],
-  );
-  Widget separation() => Form(
-    key: separationKey,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        steps(2),
-        title('Datos de separación'),
-        box(
-          Column(
-            children: [
-              pair('Proyecto', '${c.lot?['proyecto']}'),
-              pair('Lote', '${c.lot?['manzana']}-${c.lot?['codigo']}'),
-              pair('Cliente', '${c.selectedClient?['nombre']}'),
-              pair('Precio', money(c.lot?['precio'])),
-            ],
-          ),
-        ),
-        field(
-          'Monto de separación (S/)',
-          amount,
-          keyboard: const TextInputType.numberWithOptions(decimal: true),
-        ),
-        pair(
-          'Fecha de registro',
-          '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
-        ),
-        field('Observación', observation, mandatory: false, lines: 3),
-        note(
-          'El monto de separación se registra en esta operación. El precio y los planes se consultan en el detalle del lote.',
-        ),
-        button(
-          'Revisar separación',
-          () => run(() async {
+          space(14),
+          field('Observación (opcional)', observation, lines: 3),
+          space(17),
+          primary('Revisar separación', () {
             if (!separationKey.currentState!.validate()) return;
             final value = num.tryParse(amount.text.replaceAll(',', '.'));
-            if (value == null ||
-                value <= 0 ||
-                value > (c.lot!['precio'] as num)) {
-              throw ApiException(
-                'Ingresa un monto mayor que cero y dentro del precio.',
-              );
+            if (value == null || value <= 0 || value > price) {
+              message('Ingresa un monto mayor que cero y dentro del precio.');
+              return;
+            }
+            if (c.selectedPlan == null) {
+              message('Selecciona un plan vigente.');
+              return;
             }
             setState(() => confirmed = false);
             go('review');
-          }),
-          icon: Icons.arrow_forward,
+          }, after: 'arrow-right'),
+        ],
+      ),
+    );
+  }
+
+  Widget paymentRow(String label, String value, {bool highlight = false}) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: highlight ? const Color(0xfffff5d5) : Colors.white,
+          border: highlight
+              ? null
+              : const PrototypeBorder(
+                  bottom: BorderSide(color: Color(0xffeeeae3)),
+                ),
         ),
-      ],
-    ),
-  );
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            tx(label, size: 10.56, color: muted),
+            tx(
+              value,
+              size: highlight ? 13.76 : 11.52,
+              weight: FontWeight.w700,
+              color: highlight ? const Color(0xff805d05) : ink,
+            ),
+          ],
+        ),
+      );
+  Widget summaryRow(String icon, String label, String value, String hint) =>
+      Container(
+        padding: const EdgeInsets.all(13),
+        decoration: const BoxDecoration(
+          border: PrototypeBorder(bottom: BorderSide(color: Color(0xffebe8e1))),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xfffff1c9),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: ico(icon, size: 19, color: const Color(0xff9a6e02)),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  tx(label, size: 9.76, color: const Color(0xff837f76)),
+                  space(2),
+                  tx(value, size: 12, weight: FontWeight.w700),
+                  space(2),
+                  tx(hint, size: 10.24, color: muted),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
   Widget review() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      steps(3),
-      title('Revisa antes de confirmar'),
-      box(
+      steps(4),
+      sectionTitle('Resumen de la operación', overline: 'PASO 4 DE 4', top: 0),
+      uiBox(
         Column(
           children: [
-            pair('Cliente', '${c.selectedClient?['nombre']}'),
-            pair('Documento', '${c.selectedClient?['numero_documento']}'),
-            pair('Proyecto', '${c.lot?['proyecto']}'),
-            pair('Lote', '${c.lot?['manzana']}-${c.lot?['codigo']}'),
-            pair('Monto', money(amount.text.replaceAll(',', '.'))),
-            pair('Asesor', '${c.user?['name']}'),
+            summaryRow(
+              'house',
+              'Lote',
+              '$projectTitle · MZ ${c.lot?['manzana']} · Lote $lotCode',
+              '${c.lot?['referencia'] ?? ''} · ${c.lot?['area_m2']} m²',
+            ),
+            summaryRow(
+              'user-round',
+              'Titular',
+              '${c.selectedClient?['nombre']}',
+              'DNI ${c.selectedClient?['numero_documento']} · ${c.selectedClient?['telefono'] ?? ''}',
+            ),
+            if (c.coClient != null)
+              summaryRow(
+                'users-round',
+                'Cotitular',
+                '${c.coClient!['nombre']}',
+                'DNI ${c.coClient!['numero_documento']} · documentos completos',
+              ),
+            summaryRow(
+              'wallet-cards',
+              'Condiciones',
+              '${money(amount.text.replaceAll(',', '.'))} de separación',
+              'Inicial ${money(plan['inicial'])} · ${plan['numero_cuotas']} cuotas de ${money(plan['monto_cuota'])}',
+            ),
           ],
         ),
+        padding: EdgeInsets.zero,
+        radius: 14,
       ),
-      note(
-        'Al confirmar, el sistema volverá a validar la disponibilidad y cambiará el lote a Reservado.',
-        icon: Icons.info_outline,
+      space(13),
+      uiBox(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ico('shield-check', color: const Color(0xff735a18)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  tx(
+                    'Validación final',
+                    size: 11.68,
+                    color: const Color(0xff735a18),
+                    weight: FontWeight.w700,
+                  ),
+                  space(3),
+                  tx(
+                    'Al confirmar, el lote cambiará de Disponible a Reservado.',
+                    size: 10.24,
+                    color: const Color(0xff735a18),
+                    height: 1.4,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(12),
+        radius: 11,
+        color: const Color(0xfffff7df),
+        line: const Color(0xffe6cc79),
       ),
-      CheckboxListTile(
-        contentPadding: EdgeInsets.zero,
-        value: confirmed,
-        onChanged: (v) => setState(() => confirmed = v ?? false),
-        controlAffinity: ListTileControlAffinity.leading,
-        title: const Text(
-          'Confirmo que los datos de la operación son correctos.',
-          style: TextStyle(fontSize: 13),
+      space(13),
+      Semantics(
+        label: 'Confirmo que los datos fueron revisados con el cliente.',
+        checked: confirmed,
+        child: InkWell(
+          onTap: () => setState(() => confirmed = !confirmed),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 20,
+                height: 22,
+                child: Checkbox(
+                  value: confirmed,
+                  activeColor: primaryGold,
+                  visualDensity: VisualDensity.compact,
+                  onChanged: (v) => setState(() => confirmed = v ?? false),
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: tx(
+                  'Confirmo que los datos fueron revisados con el cliente.',
+                  size: 10.88,
+                  color: const Color(0xff5c5952),
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      button(
+      space(17),
+      primary(
         'Confirmar separación',
         confirmed
             ? () => run(
@@ -1262,221 +3017,865 @@ class _CasaViewState extends State<CasaView> {
                 ),
               )
             : null,
-        icon: Icons.check,
+        before: 'key-round',
       ),
+      space(5),
       TextButton(
         onPressed: () => go('separation'),
-        child: const Text('Volver a revisar'),
+        child: tx('Editar información', size: 11.52, color: muted),
       ),
     ],
   );
-  Widget success() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      const Padding(
-        padding: EdgeInsets.symmetric(vertical: 25),
-        child: Icon(
-          Icons.check_circle_outline,
-          size: 90,
-          color: Color(0xff287541),
-        ),
+  String reservationCode(Data r) {
+    final d = when(r['fecha_registro']);
+    return 'SEP-${d.year}-${'${r['id']}'.padLeft(4, '0')}';
+  }
+
+  Widget receiptRow(String label, Widget value) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    decoration: const BoxDecoration(
+      border: PrototypeBorder(bottom: BorderSide(color: Color(0xffeeeae3))),
+    ),
+    child: Row(
+      children: [
+        Expanded(child: tx(label, size: 10.4, color: muted)),
+        const SizedBox(width: 10),
+        Flexible(flex: 2, child: value),
+      ],
+    ),
+  );
+  Widget success() {
+    final r = c.result ?? <String, dynamic>{};
+    return SingleChildScrollView(
+      key: const ValueKey('success-scroll'),
+      padding: const EdgeInsets.fromLTRB(25, 22, 25, 26),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          RepaintBoundary(
+            key: receiptKey,
+            child: ColoredBox(
+              color: paper,
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      brand(compact: true),
+                      tx(
+                        'Separación registrada',
+                        size: 10.56,
+                        color: const Color(0xff79756d),
+                      ),
+                    ],
+                  ),
+                  space(34),
+                  Container(
+                    width: 88,
+                    height: 88,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: const Color(0xffdaf0df),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xffedf8ef),
+                        width: 8,
+                      ),
+                    ),
+                    child: ico(
+                      'check',
+                      size: 42,
+                      color: const Color(0xff287541),
+                    ),
+                  ),
+                  space(17),
+                  eyebrow('OPERACIÓN EXITOSA'),
+                  space(5),
+                  tx(
+                    '¡Lote reservado!',
+                    size: 28.8,
+                    height: 1.2,
+                    spacing: -1.1,
+                    align: TextAlign.center,
+                  ),
+                  space(5),
+                  tx(
+                    'La disponibilidad del lote se actualizó correctamente.',
+                    size: 12.48,
+                    color: const Color(0xff747169),
+                    align: TextAlign.center,
+                  ),
+                  space(23),
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      border: PrototypeBorder(
+                        top: BorderSide(color: gold, width: 3),
+                        left: BorderSide(color: Color(0xffdad6cd)),
+                        right: BorderSide(color: Color(0xffdad6cd)),
+                        bottom: BorderSide(color: Color(0xffdad6cd)),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x0f1f1b13),
+                          blurRadius: 18,
+                          offset: Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        for (final pair in [
+                          ('Código', reservationCode(r)),
+                          ('Proyecto', projectTitle),
+                          ('Lote', lotSubtitle),
+                          ('Cliente', '${c.selectedClient?['nombre'] ?? ''}'),
+                          ('Monto', money(r['monto'])),
+                        ])
+                          receiptRow(
+                            pair.$1,
+                            tx(
+                              pair.$2,
+                              size: 11.36,
+                              weight: FontWeight.w700,
+                              align: TextAlign.right,
+                            ),
+                          ),
+                        receiptRow(
+                          'Estado',
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xffe5f2e8),
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: tx(
+                              'Reservado',
+                              size: 11.36,
+                              color: const Color(0xff2b6b3d),
+                              weight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  space(13),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ico('clock-3', size: 15, color: const Color(0xff827e75)),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: tx(
+                          'Registrado el ${dateText(when(r['fecha_registro']))} a las ${timeText(when(r['fecha_registro']))}',
+                          size: 9.92,
+                          color: const Color(0xff827e75),
+                          align: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
+                  space(16),
+                ],
+              ),
+            ),
+          ),
+          primary(
+            'Compartir constancia',
+            () => shareBoundary(receiptKey, 'constancia_${r['id']}.png'),
+            before: 'share-2',
+          ),
+          space(9),
+          primary('Volver al inicio', () {
+            c.lot = null;
+            go('home');
+          }, outline: true),
+        ],
       ),
-      const Text(
-        '¡Separación exitosa!',
-        textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
-      ),
-      const SizedBox(height: 8),
-      const Text(
-        'La operación quedó registrada.',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: muted),
-      ),
-      const SizedBox(height: 25),
-      box(
-        Column(
-          children: [
-            pair('N.º de separación', '#${c.result?['id']}'),
-            pair('Cliente', '${c.selectedClient?['nombre']}'),
-            pair('Lote', '${c.lot?['manzana']}-${c.lot?['codigo']}'),
-            pair('Monto', money(c.result?['monto'])),
-            pair('Estado del lote', 'Reservado'),
-          ],
-        ),
-      ),
-      note('El historial registra al usuario y la fecha de la operación.'),
-      button(
-        'Ver separaciones',
-        () => go('reservations'),
-        icon: Icons.description_outlined,
-      ),
-      OutlinedButton(
-        onPressed: () => go('home'),
-        child: const Text('Volver al inicio'),
-      ),
-    ],
+    );
+  }
+
+  bool hasReservation(Data client) => c.reservations.any(
+    (r) =>
+        r['estado'] == 'ACTIVA' &&
+        (r['cliente_id'] == client['id'] || r['cotitular_id'] == client['id']),
+  );
+  Widget tabs(
+    List<(String, int)> values,
+    int selected,
+    void Function(int) change,
+  ) => Container(
+    margin: const EdgeInsets.only(top: 16),
+    decoration: const BoxDecoration(
+      border: PrototypeBorder(bottom: BorderSide(color: Color(0xffdcd8cf))),
+    ),
+    child: Row(
+      children: [
+        for (int i = 0; i < values.length; i++)
+          Expanded(
+            child: Semantics(
+              button: true,
+              selected: selected == i,
+              child: tap(
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 10,
+                    horizontal: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    border: PrototypeBorder(
+                      bottom: BorderSide(
+                        color: selected == i ? primaryGold : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: tx(
+                          values[i].$1,
+                          size: 11.36,
+                          color: selected == i
+                              ? const Color(0xff8d6604)
+                              : const Color(0xff7d7970),
+                          weight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xffebe8e1),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: tx('${values[i].$2}', size: 9.28, color: muted),
+                      ),
+                    ],
+                  ),
+                ),
+                () => change(i),
+              ),
+            ),
+          ),
+      ],
+    ),
   );
   Widget clients() {
-    final list = c.clients
+    final q = search.text.trim().toLowerCase();
+    final assigned = c.clients
+        .where((p) => !clientsWithReservation || hasReservation(p))
         .where(
-          (x) => '${x['nombre']} ${x['numero_documento']}'
+          (p) => '${p['nombre']} ${p['numero_documento']} ${p['telefono']}'
               .toLowerCase()
-              .contains(search.text.toLowerCase()),
+              .contains(q),
         )
         .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        title(c.lot == null ? 'Mis clientes' : 'Selecciona un cliente'),
-        TextField(
-          controller: search,
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search),
-            hintText: 'Nombre o documento',
-          ),
+        searchRow(
+          'Nombre, DNI o teléfono',
+          onAdd: () {
+            c.lot = null;
+            newClient();
+          },
         ),
-        const SizedBox(height: 14),
-        for (final item in list)
-          InkWell(
-            onTap: c.lot == null ? null : () => run(() => c.chooseClient(item)),
-            child: box(
+        tabs(
+          [
+            ('Todos', c.clients.length),
+            ('Con separación', c.clients.where(hasReservation).length),
+          ],
+          clientsWithReservation ? 1 : 0,
+          (i) => setState(() => clientsWithReservation = i == 1),
+        ),
+        sectionTitle('Clientes asignados', overline: 'REGISTROS RECIENTES'),
+        for (int i = 0; i < assigned.length; i++) ...[
+          tap(
+            uiBox(
               Row(
                 children: [
-                  const CircleAvatar(
-                    backgroundColor: Color(0xfff5e8bb),
-                    child: Icon(Icons.person_outline, color: Color(0xff9a7006)),
+                  Container(
+                    width: 42,
+                    height: 42,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: i == 0
+                          ? const Color(0xfff6e9ba)
+                          : const Color(0xffe8e6df),
+                      shape: BoxShape.circle,
+                    ),
+                    child: tx(
+                      '${assigned[i]['nombre']}'
+                          .split(' ')
+                          .where((x) => x.isNotEmpty)
+                          .take(2)
+                          .map((x) => x[0])
+                          .join()
+                          .toUpperCase(),
+                      size: 11.36,
+                      color: i == 0
+                          ? const Color(0xff7b5a05)
+                          : const Color(0xff5d5a53),
+                      weight: FontWeight.w800,
+                    ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '${item['nombre']}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        tx(
+                          '${assigned[i]['nombre']}',
+                          size: 12.16,
+                          weight: FontWeight.w700,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${item['tipo_documento']} ${item['numero_documento']}',
-                          style: const TextStyle(color: muted, fontSize: 12),
+                        space(2),
+                        tx(
+                          '${assigned[i]['tipo_documento']} ${i == 0 ? assigned[i]['numero_documento'] : '••••${'${assigned[i]['numero_documento']}'.substring(math.max(0, '${assigned[i]['numero_documento']}'.length - 4))}'} · ${assigned[i]['telefono'] ?? ''}',
+                          size: 9.76,
+                          color: const Color(0xff7b776e),
                         ),
-                        Text(
-                          '${item['telefono'] ?? ''}',
-                          style: const TextStyle(color: muted, fontSize: 12),
+                        space(2),
+                        tx(
+                          hasReservation(assigned[i])
+                              ? 'Separación activa'
+                              : 'Seguimiento',
+                          size: 9.6,
+                          color: const Color(0xff2f7042),
+                          weight: FontWeight.w700,
                         ),
                       ],
                     ),
                   ),
-                  if (c.lot != null)
-                    const Icon(Icons.chevron_right, color: gold),
+                  ico(
+                    'chevron-right',
+                    size: 19,
+                    color: const Color(0xff9a968d),
+                  ),
                 ],
               ),
+              padding: const EdgeInsets.all(11),
+              radius: 12,
             ),
+            () => clientProfile(assigned[i]),
+            label: 'Cliente ${assigned[i]['nombre']}',
           ),
-        if (list.isEmpty) note('No se encontraron clientes.'),
-        button('Nuevo cliente', () {
-          clearClient();
-          go('client-form');
-        }, icon: Icons.person_add_alt),
+          space(9),
+        ],
+        if (assigned.isEmpty) empty('No se encontraron clientes.'),
+        space(8),
+        infoNote(
+          'Los documentos de identidad solo son visibles según permisos.',
+          compact: true,
+        ),
       ],
     );
   }
 
-  Widget reservations() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      title('Seguimiento comercial'),
-      box(
-        Column(
-          children: [
-            pair(
-              'Separaciones activas',
-              '${c.reservations.where((x) => x['estado'] == 'ACTIVA').length}',
+  Widget reservations() {
+    final active = c.reservations
+        .where((r) => r['estado'] == 'ACTIVA')
+        .toList();
+    final history = c.reservations
+        .where((r) => r['estado'] != 'ACTIVA')
+        .toList();
+    final rows = reservationHistory ? history : active;
+    final total = active.fold<num>(
+      0,
+      (a, b) => a + (num.tryParse('${b['monto']}') ?? 0),
+    );
+    const months = [
+      'ENERO',
+      'FEBRERO',
+      'MARZO',
+      'ABRIL',
+      'MAYO',
+      'JUNIO',
+      'JULIO',
+      'AGOSTO',
+      'SEPTIEMBRE',
+      'OCTUBRE',
+      'NOVIEMBRE',
+      'DICIEMBRE',
+    ];
+    final now = DateTime.now();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(17),
+          decoration: BoxDecoration(
+            color: charcoal,
+            borderRadius: BorderRadius.circular(15),
+            border: const PrototypeBorder(
+              left: BorderSide(color: gold, width: 3),
             ),
-            pair(
-              'Monto registrado',
-              money(
-                c.reservations
-                    .where((x) => x['estado'] == 'ACTIVA')
-                    .fold<num>(0, (sum, x) => sum + (x['monto'] as num)),
-              ),
-            ),
-          ],
-        ),
-      ),
-      for (final r in c.reservations)
-        box(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+          child: Row(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '#${r['id']}',
-                    style: const TextStyle(color: muted, fontSize: 12),
-                  ),
-                  badge(r['estado']),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '${r['cliente']}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              Text(
-                '${r['proyecto']} · ${r['manzana']}-${r['lote']}',
-                style: const TextStyle(color: muted, fontSize: 12),
-              ),
-              pair('Separación', money(r['monto'])),
-              if (c.manager && r['estado'] == 'ACTIVA')
-                Wrap(
-                  spacing: 5,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextButton(
-                      onPressed: () => release(r),
-                      child: const Text('Liberar'),
+                    eyebrow(
+                      '${months[now.month - 1]} ${now.year}',
+                      golden: true,
                     ),
-                    TextButton(
-                      onPressed: () => reassign(r),
-                      child: const Text('Reasignar'),
-                    ),
-                    TextButton(
-                      onPressed: () => sell(r),
-                      child: const Text('Registrar venta'),
+                    space(5),
+                    tx(
+                      '${active.length} separaciones activas',
+                      size: 16,
+                      color: Colors.white,
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(width: 8),
+              tx(
+                money(total),
+                size: 16,
+                color: const Color(0xffe0ba51),
+                weight: FontWeight.w800,
+              ),
             ],
           ),
         ),
-      if (c.reservations.isEmpty)
-        note('Todavía no hay separaciones registradas.'),
-      if (c.manager)
-        OutlinedButton.icon(
-          onPressed: () => run(() async {
-            final bytes = await c.api.bytes('/reports/reservations.xlsx');
-            await share(
-              bytes,
-              'separaciones.xlsx',
-              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            );
-          }),
-          icon: const Icon(Icons.download_outlined),
-          label: const Text('Exportar reporte Excel'),
+        tabs(
+          [('Activas', active.length), ('Historial', history.length)],
+          reservationHistory ? 1 : 0,
+          (i) => setState(() => reservationHistory = i == 1),
         ),
-    ],
-  );
-  Future<String?> prompt(String text) async {
+        space(16),
+        for (int i = 0; i < rows.length; i++) ...[
+          tap(
+            uiBox(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      statusBadge(rows[i]['estado']),
+                      tx(
+                        reservationCode(rows[i]),
+                        size: 9.6,
+                        color: const Color(0xff8a867d),
+                      ),
+                    ],
+                  ),
+                  space(10),
+                  tx(
+                    '${projectName(rows[i]['proyecto'])} · MZ ${rows[i]['manzana']} · Lote ${'${rows[i]['lote']}'.padLeft(2, '0')}',
+                    size: 12.64,
+                    weight: FontWeight.w700,
+                  ),
+                  space(5),
+                  Row(
+                    children: [
+                      ico('user-round', size: 15, color: muted),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: tx(
+                          '${rows[i]['cliente']}',
+                          size: 10.4,
+                          color: muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                  space(11),
+                  const Divider(height: 1, color: Color(0xffebe8e1)),
+                  space(10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            tx(
+                              'Separación',
+                              size: 9.28,
+                              color: const Color(0xff858178),
+                            ),
+                            space(2),
+                            tx(
+                              money(rows[i]['monto']),
+                              size: 10.88,
+                              weight: FontWeight.w700,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            tx(
+                              'Registrado',
+                              size: 9.28,
+                              color: const Color(0xff858178),
+                            ),
+                            space(2),
+                            tx(
+                              '${dateText(when(rows[i]['fecha_registro']))}, ${timeText(when(rows[i]['fecha_registro']))}',
+                              size: 10.88,
+                              weight: FontWeight.w700,
+                            ),
+                          ],
+                        ),
+                      ),
+                      ico('chevron-right', color: const Color(0xff9a7006)),
+                    ],
+                  ),
+                ],
+              ),
+              line: i == 0 ? const Color(0xffd6b65c) : border,
+            ),
+            () => reservationDetail(rows[i]),
+          ),
+          space(10),
+        ],
+        if (rows.isEmpty)
+          empty(
+            reservationHistory
+                ? 'Todavía no hay operaciones en el historial.'
+                : 'Todavía no hay separaciones activas.',
+          ),
+      ],
+    );
+  }
+
+  Future<void> conditions() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: paper,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            sectionTitle('Condiciones del plan', top: 0),
+            tx(
+              '${plan['numero_cuotas']} cuotas mensuales de ${money(plan['monto_cuota'])}.',
+              weight: FontWeight.w700,
+            ),
+            space(12),
+            tx(
+              'Inicial: ${money(plan['inicial'])}. El monto de separación se registra por separado. La disponibilidad se confirma al registrar la operación.',
+              size: 13,
+              color: muted,
+            ),
+            space(18),
+            primary('Entendido', () => Navigator.pop(ctx)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> filterProjects() async {
+    String value = projectLocation;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: paper,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, update) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              sectionTitle('Filtrar proyectos', top: 0),
+              DropdownButtonFormField<String>(
+                initialValue: value,
+                decoration: const InputDecoration(labelText: 'Ubicación'),
+                items: [
+                  const DropdownMenuItem(
+                    value: '',
+                    child: Text('Todas las ubicaciones'),
+                  ),
+                  for (final loc
+                      in c.projects
+                          .map((p) => '${p['ubicacion'] ?? ''}')
+                          .where((v) => v.isNotEmpty)
+                          .toSet())
+                    DropdownMenuItem(value: loc, child: Text(loc)),
+                ],
+                onChanged: (v) => update(() => value = v ?? ''),
+              ),
+              space(18),
+              primary('Aplicar filtros', () {
+                setState(() => projectLocation = value);
+                Navigator.pop(ctx);
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> filterLots() async {
+    String state = filterState, location = filterLocation;
+    int? stage = filterStage;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: paper,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, update) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              sectionTitle('Filtrar lotes', top: 0),
+              DropdownButtonFormField<String>(
+                initialValue: state,
+                decoration: const InputDecoration(labelText: 'Estado'),
+                items: [
+                  const DropdownMenuItem(
+                    value: '',
+                    child: Text('Todos los estados'),
+                  ),
+                  for (final s in [
+                    'DISPONIBLE',
+                    'RESERVADO',
+                    'VENDIDO',
+                    'NO_DISPONIBLE',
+                  ])
+                    DropdownMenuItem(value: s, child: Text(stateLabel(s))),
+                ],
+                onChanged: (v) => update(() => state = v ?? ''),
+              ),
+              space(14),
+              DropdownButtonFormField<String>(
+                initialValue: location,
+                decoration: const InputDecoration(labelText: 'Ubicación'),
+                items: [
+                  const DropdownMenuItem(
+                    value: '',
+                    child: Text('Todas las ubicaciones'),
+                  ),
+                  for (final l
+                      in c.lots
+                          .map((l) => '${l['referencia'] ?? ''}')
+                          .where((v) => v.isNotEmpty)
+                          .toSet())
+                    DropdownMenuItem(value: l, child: Text(l)),
+                ],
+                onChanged: (v) => update(() => location = v ?? ''),
+              ),
+              space(14),
+              DropdownButtonFormField<int>(
+                initialValue: stage ?? 0,
+                decoration: const InputDecoration(labelText: 'Etapa'),
+                items: [
+                  const DropdownMenuItem(
+                    value: 0,
+                    child: Text('Todas las etapas'),
+                  ),
+                  for (final s in c.stages)
+                    DropdownMenuItem(
+                      value: (s['id'] as num).toInt(),
+                      child: Text('${s['nombre']}'),
+                    ),
+                ],
+                onChanged: (v) => update(() => stage = v == 0 ? null : v),
+              ),
+              space(18),
+              primary('Aplicar filtros', () {
+                setState(() {
+                  filterState = state;
+                  filterLocation = location;
+                  filterStage = stage;
+                });
+                Navigator.pop(ctx);
+              }),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    filterState = '';
+                    filterLocation = '';
+                    filterStage = null;
+                    chip = 'Todos';
+                  });
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Limpiar filtros'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> clientProfile(Data input) => run(() async {
+    final profile = Map<String, dynamic>.from(
+      await c.api.call('GET', '/clients/${input['id']}'),
+    );
+    final docs = cv.CasaController.rows(
+      await c.api.call('GET', '/clients/${input['id']}/documents'),
+    );
+    if (!mounted) return;
+    bool useForOperation = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: paper,
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(ctx).height * .8,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              sectionTitle('${profile['nombre']}', top: 0),
+              tx(
+                '${profile['tipo_documento']} ${profile['numero_documento']}',
+                weight: FontWeight.w700,
+              ),
+              space(10),
+              for (final pair in [
+                ('Teléfono', profile['telefono']),
+                ('Dirección', profile['direccion']),
+                ('Correo', profile['correo']),
+                ('Ocupación', profile['ocupacion']),
+              ])
+                if ('${pair.$2 ?? ''}'.isNotEmpty) ...[
+                  tx('${pair.$1}: ${pair.$2}', size: 13, color: muted),
+                  space(8),
+                ],
+              if (profile['cotitular'] != null) ...[
+                space(8),
+                tx(
+                  'Cotitular: ${profile['cotitular']['nombre']}',
+                  size: 13,
+                  weight: FontWeight.w700,
+                ),
+              ],
+              if (docs.isNotEmpty) ...[
+                space(10),
+                tx('Documentos privados', weight: FontWeight.w700),
+                for (final d in docs)
+                  TextButton(
+                    onPressed: () async {
+                      try {
+                        final b = await c.api.bytes('/documents/${d['id']}');
+                        if (!ctx.mounted) return;
+                        await showDialog<void>(
+                          context: ctx,
+                          builder: (dialog) => AlertDialog(
+                            title: Text('DNI · ${d['lado']}'),
+                            content: Image.memory(b),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(dialog),
+                                child: const Text('Cerrar'),
+                              ),
+                            ],
+                          ),
+                        );
+                      } catch (_) {
+                        message('No se pudo abrir el documento.');
+                      }
+                    },
+                    child: Text(
+                      'Ver ${d['lado'] == 'ANVERSO' ? 'anverso' : 'reverso'}',
+                    ),
+                  ),
+              ],
+              if (c.lot != null && c.lot!['estado'] == 'DISPONIBLE') ...[
+                space(18),
+                primary('Usar para esta separación', () {
+                  Navigator.pop(ctx);
+                  useForOperation = true;
+                }),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+    if (useForOperation) await c.chooseClient(profile);
+  });
+  Future<void> reservationDetail(Data r) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: paper,
+      builder: (ctx) => SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            sectionTitle(reservationCode(r), top: 0),
+            tx(
+              '${projectName(r['proyecto'])} · ${r['manzana']}-${r['lote']}',
+              weight: FontWeight.w700,
+            ),
+            space(8),
+            tx('Titular: ${r['cliente']}'),
+            space(8),
+            tx('Separación: ${money(r['monto'])}'),
+            if (r['numero_cuotas_acordado'] != null) ...[
+              space(8),
+              tx(
+                '${r['numero_cuotas_acordado']} cuotas de ${money(r['cuota_acordada'])}',
+                size: 13,
+                color: muted,
+              ),
+            ],
+            space(12),
+            statusBadge(r['estado']),
+            if (c.manager && r['estado'] == 'ACTIVA') ...[
+              space(20),
+              primary('Liberar reserva', () {
+                Navigator.pop(ctx);
+                release(r);
+              }, outline: true),
+              space(9),
+              primary('Reasignar lote', () {
+                Navigator.pop(ctx);
+                reassign(r);
+              }, outline: true),
+              space(9),
+              primary('Registrar venta', () {
+                Navigator.pop(ctx);
+                sell(r);
+              }),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<String?> reason(String title) async {
     final input = TextEditingController();
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(text),
+        title: Text(title),
         content: TextField(
           controller: input,
           maxLength: 180,
@@ -1503,18 +3902,18 @@ class _CasaViewState extends State<CasaView> {
   }
 
   Future<void> release(Data r) => run(() async {
-    final reason = await prompt('Liberar reserva #${r['id']}');
-    if (reason == null) return;
+    final why = await reason('Liberar ${reservationCode(r)}');
+    if (why == null) return;
     await c.api.call('POST', '/reservations/${r['id']}/release', {
       'estado': 'DISPONIBLE',
-      'motivo': reason,
+      'motivo': why,
     });
     await c.refresh();
   });
   Future<void> reassign(Data r) => run(() async {
     final options = cv.CasaController.rows(
       await c.api.call('GET', '/lots?state=DISPONIBLE'),
-    );
+    ).where((l) => l['proyecto'] == r['proyecto']).toList();
     if (!mounted) return;
     final selected = await showDialog<Data>(
       context: context,
@@ -1535,11 +3934,11 @@ class _CasaViewState extends State<CasaView> {
       ),
     );
     if (selected == null || !mounted) return;
-    final reason = await prompt('Motivo de reasignación');
-    if (reason == null) return;
+    final why = await reason('Motivo de reasignación');
+    if (why == null) return;
     await c.api.call('POST', '/reservations/${r['id']}/reassign', {
       'lote_id': selected['id'],
-      'motivo': reason,
+      'motivo': why,
     });
     await c.refresh();
   });
@@ -1548,31 +3947,62 @@ class _CasaViewState extends State<CasaView> {
     if (!mounted) return;
     final price = TextEditingController(text: '${l['precio']}'),
         initial = TextEditingController(text: '${l['inicial']}');
+    final pp = cv.CasaController.rows(l['planes']);
+    if (pp.isEmpty) {
+      throw ApiException('El lote no cuenta con planes vigentes.');
+    }
+    Data selected = pp.last;
     bool signed = false;
+    final key = GlobalKey<FormState>();
     final accepted = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, update) => AlertDialog(
           title: const Text('Registrar venta'),
           content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                field(
-                  'Precio final (S/)',
-                  price,
-                  keyboard: TextInputType.number,
-                ),
-                field('Inicial (S/)', initial, keyboard: TextInputType.number),
-                CheckboxListTile(
-                  value: signed,
-                  onChanged: (v) => update(() => signed = v ?? false),
-                  title: const Text(
-                    'Confirmo contrato firmado',
-                    style: TextStyle(fontSize: 13),
+            child: Form(
+              key: key,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  field(
+                    'Precio final (S/)',
+                    price,
+                    required: true,
+                    keyboard: TextInputType.number,
                   ),
-                ),
-              ],
+                  space(14),
+                  field(
+                    'Inicial (S/)',
+                    initial,
+                    required: true,
+                    keyboard: TextInputType.number,
+                  ),
+                  space(14),
+                  DropdownButtonFormField<int>(
+                    initialValue: (selected['id'] as num).toInt(),
+                    decoration: const InputDecoration(labelText: 'Plan'),
+                    items: [
+                      for (final p in pp)
+                        DropdownMenuItem(
+                          value: (p['id'] as num).toInt(),
+                          child: Text('${p['numero_cuotas']} meses'),
+                        ),
+                    ],
+                    onChanged: (id) => update(
+                      () => selected = pp.firstWhere((p) => p['id'] == id),
+                    ),
+                  ),
+                  CheckboxListTile(
+                    value: signed,
+                    onChanged: (v) => update(() => signed = v ?? false),
+                    title: const Text(
+                      'Confirmo contrato firmado',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -1581,7 +4011,13 @@ class _CasaViewState extends State<CasaView> {
               child: const Text('Cancelar'),
             ),
             TextButton(
-              onPressed: signed ? () => Navigator.pop(ctx, true) : null,
+              onPressed: signed
+                  ? () {
+                      if (key.currentState!.validate()) {
+                        Navigator.pop(ctx, true);
+                      }
+                    }
+                  : null,
               child: const Text('Confirmar venta'),
             ),
           ],
@@ -1590,10 +4026,10 @@ class _CasaViewState extends State<CasaView> {
     );
     if (accepted == true) {
       await c.api.call('POST', '/reservations/${r['id']}/sale', {
-        'plan_id': (l['planes'] as List).first['id'],
+        'plan_id': selected['id'],
         'precio': num.tryParse(price.text),
         'inicial': num.tryParse(initial.text),
-        'contrato_firmado': signed,
+        'contrato_firmado': true,
         'fecha': DateTime.now().toIso8601String().substring(0, 10),
       });
       await c.refresh();
@@ -1601,39 +4037,54 @@ class _CasaViewState extends State<CasaView> {
     price.dispose();
     initial.dispose();
   });
-  Future<void> showHistory(int id) => run(() async {
-    final list = cv.CasaController.rows(
-      await c.api.call('GET', '/lots/$id/history'),
+  Future<void> adminState() => run(() async {
+    final l = c.lot!;
+    final next = l['estado'] == 'DISPONIBLE' ? 'NO_DISPONIBLE' : 'DISPONIBLE';
+    final why = await reason(
+      next == 'NO_DISPONIBLE' ? 'Deshabilitar lote' : 'Reactivar lote',
+    );
+    if (why == null) return;
+    await c.api.call('PATCH', '/lots/${l['id']}/state', {
+      'estado': next,
+      'motivo': why,
+    });
+    await c.selectLot(l);
+  });
+  Future<void> showHistory() => run(() async {
+    final rows = cv.CasaController.rows(
+      await c.api.call('GET', '/lots/${c.lot!['id']}/history'),
     );
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (ctx) => ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          title('Historial del lote'),
-          if (list.isEmpty) const Text('Sin cambios registrados.'),
-          for (final h in list)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                '${stateLabel(h['estado_anterior'])} a ${stateLabel(h['estado_nuevo'])}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
+      backgroundColor: paper,
+      builder: (ctx) => SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            sectionTitle('Historial del lote', top: 0),
+            if (rows.isEmpty)
+              tx('Todavía no hay cambios registrados.', size: 13, color: muted),
+            for (final row in rows) ...[
+              tx(
+                '${stateLabel(row['estado_anterior'])} → ${stateLabel(row['estado_nuevo'])}',
+                weight: FontWeight.w700,
               ),
-              subtitle: Text(
-                '${h['motivo']}\n${h['usuario']}\n${h['fecha_cambio']}',
-                style: const TextStyle(fontSize: 12),
+              space(5),
+              tx('${row['motivo']}', size: 12, color: muted),
+              tx(
+                '${dateText(when(row['fecha_cambio']))} · ${row['usuario']}',
+                size: 11,
+                color: muted,
               ),
-            ),
-        ],
+              space(16),
+            ],
+          ],
+        ),
       ),
     );
   });
-  Future<void> share(Uint8List bytes, String name, String mime) async {
-    await shareFile(bytes, name, mime);
-  }
 }

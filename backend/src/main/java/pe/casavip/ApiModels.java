@@ -1,5 +1,6 @@
 package pe.casavip;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -8,7 +9,11 @@ import java.time.LocalDate;
 public final class ApiModels {
   private ApiModels() {}
 
-  public record Actor(long id, String name, String role) {
+  public record Actor(long id, String name, String role, String phone) {
+    public Actor(long id, String name, String role) {
+      this(id, name, role, null);
+    }
+
     public boolean manager() {
       return !"ASESOR".equals(role);
     }
@@ -23,13 +28,50 @@ public final class ApiModels {
       @NotBlank String numero_documento,
       @Pattern(regexp = "[0-9+ ()-]{6,25}") String telefono,
       @Email @Size(max = 120) String correo,
-      @Positive long proyecto_id) {}
+      @Positive long proyecto_id,
+      @Size(max = 250) String direccion,
+      @Size(max = 120) String ocupacion,
+      @Valid CoClient cotitular) {
+    public Client(
+        String nombre,
+        String tipo_documento,
+        String numero_documento,
+        String telefono,
+        String correo,
+        long proyecto_id) {
+      this(
+          nombre,
+          tipo_documento,
+          numero_documento,
+          telefono,
+          correo,
+          proyecto_id,
+          null,
+          null,
+          null);
+    }
+  }
+
+  public record CoClient(
+      @NotBlank @Size(max = 160) String nombre,
+      @NotBlank @Pattern(regexp = "DNI|CE") String tipo_documento,
+      @NotBlank String numero_documento,
+      @Pattern(regexp = "[0-9+ ()-]{6,25}") String telefono,
+      @Email @Size(max = 120) String correo,
+      @Size(max = 250) String direccion,
+      @Size(max = 120) String ocupacion) {}
 
   public record Reservation(
       @Positive long lote_id,
       @Positive long cliente_id,
       @NotNull @DecimalMin("0.01") BigDecimal monto,
-      @Size(max = 500) String observacion) {}
+      @Size(max = 500) String observacion,
+      @Positive Long plan_id,
+      @Positive Long cotitular_id) {
+    public Reservation(long lote_id, long cliente_id, BigDecimal monto, String observacion) {
+      this(lote_id, cliente_id, monto, observacion, null, null);
+    }
+  }
 
   public record Reassign(@Positive long lote_id, @NotBlank @Size(max = 180) String motivo) {}
 

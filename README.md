@@ -1,31 +1,20 @@
-# CASA VIP · Avance de proyecto 3
+# CASA VIP — Avance de proyecto 3 · revisión 0.3.1
 
-Piloto académico SHENNAN HOUSE. Interfaz Flutter conectada a una API Java 21 / Spring Boot y persistencia JDBC. Conserva el prototipo del avance 2.
+Aplicación Flutter y API Java 21 / Spring Boot para el piloto académico SHENNAN HOUSE. Esta revisión reconstruye las 14 pantallas a partir del TypeScript, CSS, logotipo y capturas del prototipo aprobado del avance 2.
 
-## Alcance comprobado
+## Cambios de esta revisión
 
-- 14 pantallas y recorrido de separación confirmado mediante la API real.
-- 29 de 33 requisitos completos (87,9 % por conteo sin ponderación). RF-07, RF-27 y RF-32 parciales, RF-12 pendiente.
-- 26 casos Java aprobados con H2 y con PostgreSQL 17.6; cinco casos Flutter aprobados. Son 31 casos únicos y 57 ejecuciones.
-- Análisis Flutter sin incidencias y compilación web correcta.
-- Seguridad por rol, aislamiento entre asesores, sesiones con vencimiento y archivos privados.
-- Reservas, liberaciones, reasignaciones y ventas con transacciones e historial.
+Se recuperaron la composición negra y dorada, los iconos de contorno, el encabezado con avatar, la navegación inferior, las tarjetas, los estados, los formularios y los cuatro pasos de separación. El acceso solo solicita correo y contraseña; la dirección del servidor se configura al compilar y no aparece en el login.
 
-## Estructura
+Los datos de dirección, correo, ocupación y cotitular se guardan en la API. Se pueden adjuntar las dos caras del documento de cada persona. Los planes de 12, 24, 36 y 48 meses se consultan por lote; la separación conserva el plan y sus condiciones calculadas por el servidor. La ficha y la constancia se comparten como imágenes de la propia interfaz.
 
-- backend: API Java, reglas, DAO, seguridad y pruebas.
-- mobile: fuentes Flutter para web y Android.
-- database: esquema original de 15 tablas y ampliación del avance 3.
-- docs: arquitectura, API, instrucciones y Javadoc.
-- evidence: registros y capturas con datos ficticios.
+El catálogo, las cantidades, las fechas y los nombres se obtienen de la base. Por ello pueden diferir de los valores ilustrativos del prototipo. Las funciones administrativas e historial siguen disponibles desde el avatar o el detalle correspondiente, según el rol.
 
 ## Demostración integrada
 
-El paquete Aplicativo_CASA_VIP incluye casa-vip-backend-0.3.0.jar e INICIAR_CASA_VIP.cmd. Se necesita Java 21 instalado. Abrir el iniciador y visitar http://127.0.0.1:8080. Mantener la ventana del servidor abierta y detenerla con Ctrl+C.
+El paquete `Aplicativo_CASA_VIP_0.3.1.zip` incluye el servidor con la web Flutter incorporada. Requiere Java 21. Extraerlo en una carpeta y abrir `INICIAR_CASA_VIP.cmd`; ingresar a `http://127.0.0.1:8080`. Mantener abierta la ventana del servidor; detener con Ctrl+C.
 
-El ejecutable incorpora la API y la versión web Flutter. No se requiere Maven ni Flutter para ejecutar ese paquete. El código fuente del repositorio requiere compilar la web antes de empaquetar la API.
-
-Cuentas de demostración, contraseña común CasaVIP-demo-2026!:
+Cuentas ficticias de demostración, contraseña común `CasaVIP-demo-2026!`:
 
 | Rol | Correo |
 | --- | --- |
@@ -33,42 +22,46 @@ Cuentas de demostración, contraseña común CasaVIP-demo-2026!:
 | Responsable comercial | responsable@casavip.pe |
 | Administrador | admin@casavip.pe |
 
-La base H2 se guarda en data/ con escritura inmediata (WRITE_DELAY=0), y las imágenes privadas en private-files/, dentro de la carpeta de ejecución. Las cuentas y los clientes son ficticios. La aplicación escucha en la interfaz local de manera predeterminada. No usar estas credenciales en un entorno compartido.
+La base H2 se conserva en `data/` y las imágenes privadas en `private-files/`, dentro de la carpeta del aplicativo. El perfil demo amplía de manera idempotente el catálogo y conserva los registros existentes. Se aconseja respaldar ambas carpetas antes de sustituir una versión anterior.
+
+## Ejecución desde un celular
+
+La web usa la API del mismo origen. Para una prueba en la misma red, el iniciador `INICIAR_CASA_VIP_RED_LOCAL.cmd` escucha en las interfaces del equipo. Abrir desde el navegador del teléfono `http://IP_DEL_EQUIPO:8080`. El teléfono y el equipo deben poder comunicarse y el firewall debe permitir el puerto. La IP se utiliza en la dirección del navegador, no en un campo del login.
+
+El APK adjunto es una compilación debug para Android arm64. Sin configuración adicional apunta al emulador (`http://10.0.2.2:8080`). Para un teléfono físico se debe compilar con una API accesible:
+
+```powershell
+flutter build apk --debug --target-platform android-arm64 --dart-define=API_URL=http://IP_DEL_EQUIPO:8080
+```
+
+También puede definirse la variable de repositorio `CASA_VIP_API_URL` para GitHub Actions. Esta configuración pertenece al entorno técnico. Los endpoint de una aplicación pueden inspeccionarse en el binario o el tráfico; retirarlos de la pantalla evita exponerlos en la interfaz, pero no los convierte en secretos de autenticación.
 
 ## Construir desde fuentes
 
-Requisitos: JDK 21, Maven 3.9, Flutter 3.41.9. Para Android: SDK compatible, licencias aceptadas y dispositivo o emulador.
+Requisitos: JDK 21, Maven 3.9 y Flutter 3.41.9. Para Android se necesita un SDK compatible y sus licencias aceptadas.
 
-En mobile:
-1. flutter pub get
-2. flutter analyze
-3. flutter test
-4. flutter build web --release
+En `mobile/` ejecutar `flutter pub get`, `flutter analyze`, `flutter test` y `flutter build web --release --no-web-resources-cdn`. Copiar `mobile/build/web/` a `backend/src/main/resources/static/`. En `backend/` ejecutar `mvn test package`.
 
-Copiar el contenido de mobile/build/web/ a backend/src/main/resources/static/. En backend ejecutar mvn test package. El archivo resultante es target/casa-vip-backend-0.3.0.jar. Para iniciar usar java -jar target/casa-vip-backend-0.3.0.jar --app.nio2=true.
+Iniciar el resultado con:
 
-El conector NIO2 es una opción de compatibilidad para el entorno Windows de Codex. No cambia el contrato HTTP ni las reglas del sistema.
+```powershell
+java -jar target/casa-vip-backend-0.3.1.jar --app.nio2=true --spring.profiles.active=demo
+```
+
+`--app.nio2=true` es una opción de compatibilidad del conector HTTP para este entorno Windows.
 
 ## PostgreSQL
 
-Crear una base vacía y aplicar database/01_esquema_avance2.sql y luego database/02_ampliacion_avance3.sql. Definir DB_URL (jdbc:postgresql://host:puerto/base), DB_USER y DB_PASSWORD. Iniciar con --spring.profiles.active=postgres. El perfil postgres no inserta usuarios ni datos ficticios; estos deben provisionarse expresamente y las contraseñas deben estar codificadas con BCrypt.
+Para una base nueva aplicar, en orden, los tres archivos de `database/`: `01_esquema_avance2.sql`, `02_ampliacion_avance3.sql` y `03_fidelidad_prototipo.sql`. Para una base con los dos primeros SQL, aplicar solo el tercero. La migración agrega campos y relaciones sin borrar registros.
 
-No copiar data/ de H2 a PostgreSQL. Los documentos se guardan fuera de la base en PRIVATE_ROOT. Configurar HTTPS, respaldos y credenciales antes de un despliegue compartido.
+Definir `DB_URL`, `DB_USER` y `DB_PASSWORD`, e iniciar con `--spring.profiles.active=postgres`. Este perfil no provisiona cuentas ni datos ficticios. Las contraseñas deben almacenarse como BCrypt. Las fotos se conservan en `PRIVATE_ROOT`.
 
-## Android
+## Verificación y límites
 
-Desde mobile ejecutar flutter build apk --debug --target-platform android-arm64. GitHub Actions también contiene una compilación Linux reproducible. El APK debug es para revisión académica, no para publicar en una tienda.
+Se ejecutaron 35 casos Java con H2 y los mismos 35 con PostgreSQL 17.6, además de 11 casos Flutter: 46 casos distintos y 81 ejecuciones. Las pruebas incluyen permisos, aislamiento entre asesores, transacciones, cotitular, cuatro fotos, planes, formulario de acceso sin servidor y adaptación a 360 px. Los registros de esta revisión están en `evidence/revision_0_3_1/`.
 
-En el emulador, la API predeterminada es http://10.0.2.2:8080. En un teléfono se necesita una API accesible desde su red y definir su dirección en Conexión. El servidor local predeterminado no se expone a la red. Una compilación no reemplaza la validación de selección de imágenes y compartición en un dispositivo real.
+La compilación Android y las comprobaciones de navegador se documentan en la entrega. La cámara y el envío a una instalación real de WhatsApp requieren validación en un teléfono físico; una compilación y una prueba web no sustituyen esa validación.
 
-## Verificación reproducible
-
-En backend: mvn test. Para repetir la suite con PostgreSQL, preparar una base de pruebas aislada y aplicar los dos SQL. Ejecutar mvn test con los parámetros -Dspring.datasource.url=jdbc:postgresql://host:puerto/base_pruebas, -Dspring.datasource.username=usuario_pruebas, -Dspring.datasource.password=clave y -Dspring.sql.init.mode=never. La suite utiliza el perfil test y limpia sus tablas antes de cada caso. No usar una base real de la empresa.
-
-En mobile: flutter test y flutter analyze. Los resultados archivados incluyen las fases roja y verde de TDD. La evidencia de navegador muestra la creación de una separación mediante la API real.
-
-## Pendientes
-
-Filtro independiente por etapa, campos configurables y cotitulares, correcciones administrativas avanzadas y validación Android en dispositivo. La entrega no declara validación con usuarios finales ni despliegue productivo. El manifiesto distingue artefactos compilados de puntos aún no verificados.
+Los documentos académicos de la entrega anterior corresponden a 0.3.0. Las capturas nuevas y las notas de revisión acompañan esta versión; no se modificó el prototipo original.
 
 Estudiante: Lopez Huaman, Yori Yasser — U21231292. Trabajo elaborado con asistencia de IA y sujeto a revisión y sustentación del estudiante.

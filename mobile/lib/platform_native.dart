@@ -16,3 +16,11 @@ Future<void> shareFile(Uint8List bytes, String name, String mime) async {
     'mime': mime,
   });
 }
+
+Future<void> shareWhatsApp(Uint8List bytes, String name, String mime) async {
+  await _channel.invokeMethod<void>('shareWhatsApp', {
+    'bytes': bytes,
+    'name': name,
+    'mime': mime,
+  });
+}

@@ -20,7 +20,10 @@ public class DemoData implements CommandLineRunner {
   }
 
   public void run(String... args) {
-    if (jdbc.queryForObject("select count(*) from usuario", Integer.class) > 0) return;
+    if (jdbc.queryForObject("select count(*) from usuario", Integer.class) > 0) {
+      ensurePrototypeCatalog();
+      return;
+    }
     jdbc.update(
         "insert into rol(nombre) values('ASESOR'),('RESPONSABLE_COMERCIAL'),('ADMINISTRADOR')");
     String hash = new BCryptPasswordEncoder(12).encode(password);
@@ -83,5 +86,72 @@ public class DemoData implements CommandLineRunner {
             + " values(4,1,1,'DISPONIBLE','RESERVADO','Datos ficticios del"
             + " piloto'),(5,1,2,'DISPONIBLE','RESERVADO','Datos ficticios del"
             + " piloto'),(5,2,2,'RESERVADO','VENDIDO','Datos ficticios del piloto')");
+    ensurePrototypeCatalog();
+  }
+
+  private void ensurePrototypeCatalog() {
+    jdbc.update(
+        "update usuario set telefono='900000000' where telefono is null and correo in"
+            + " ('asesor@casavip.pe','responsable@casavip.pe','admin@casavip.pe')");
+    jdbc.update(
+        "update proyecto set ubicacion='Huacho, Lima' where codigo='SH' and ubicacion like"
+            + " 'Piloto%'");
+    for (String code : new String[] {"A", "C", "D", "P1", "P2"})
+      jdbc.update(
+          "insert into manzana(etapa_id,codigo) select 1,? where not exists(select 1 from manzana"
+              + " where etapa_id=1 and codigo=?)",
+          code,
+          code);
+    for (var lot :
+        jdbc.queryForList(
+            "select l.id,l.codigo,l.precio,m.codigo as manzana,e.proyecto_id from lote l join"
+                + " manzana m on m.id=l.manzana_id join etapa e on e.id=m.etapa_id where"
+                + " e.proyecto_id=1")) {
+      long id = ((Number) lot.get("id")).longValue();
+      String code = String.valueOf(lot.get("codigo"));
+      String location =
+          switch (code) {
+            case "1" -> "Esquina Panamericana";
+            case "2" -> "Panamericana";
+            case "15" -> "Esquina interior";
+            case "19" -> "Avenida";
+            default -> "Parque";
+          };
+      jdbc.update("update lote set ubicacion=? where id=? and ubicacion is null", location, id);
+      java.math.BigDecimal price = (java.math.BigDecimal) lot.get("precio");
+      var existing =
+          jdbc.queryForList(
+              "select pp.* from plan_pago pp join lote_plan_pago lp on lp.plan_pago_id=pp.id where"
+                  + " lp.lote_id=? order by pp.numero_cuotas desc",
+              id);
+      if (existing.isEmpty()) continue;
+      java.math.BigDecimal initial = (java.math.BigDecimal) existing.getFirst().get("inicial");
+      for (int months : new int[] {12, 24, 36}) {
+        String name = lot.get("manzana") + "-" + code + " " + months + " cuotas";
+        java.math.BigDecimal installment =
+            price
+                .subtract(initial)
+                .divide(java.math.BigDecimal.valueOf(months), 2, java.math.RoundingMode.HALF_UP);
+        jdbc.update(
+            "insert into plan_pago(proyecto_id,nombre,inicial,numero_cuotas,monto_cuota) select"
+                + " 1,?,?,?,? where not exists(select 1 from plan_pago where proyecto_id=1 and"
+                + " nombre=?)",
+            name,
+            initial,
+            months,
+            installment,
+            name);
+        long plan =
+            jdbc.queryForObject(
+                "select id from plan_pago where proyecto_id=1 and nombre=?", Long.class, name);
+        jdbc.update(
+            "insert into lote_plan_pago(lote_id,plan_pago_id) select ?,? where not exists(select 1"
+                + " from lote_plan_pago where lote_id=? and plan_pago_id=?)",
+            id,
+            plan,
+            id,
+            plan);
+      }
+    }
   }
 }

@@ -6,6 +6,9 @@ on:
       - 'mobile/**'
       - '.github/workflows/android.yml'
   pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/android.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -32,7 +35,10 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build apk --debug --target-platform android-arm64
+      - name: Compilar APK de revisión
+        env:
+          CASA_VIP_API_URL: ${{ vars.CASA_VIP_API_URL }}
+        run: flutter build apk --debug --target-platform android-arm64 --dart-define=API_URL="$CASA_VIP_API_URL"
       - uses: actions/upload-artifact@v7
         with:
           name: CASA-VIP-Android-arm64
