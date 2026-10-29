@@ -248,6 +248,13 @@ extension _CommercialExtension on _CasaViewState {
                   onPressed: () => Navigator.pop(ctx, 'unlink'),
                   child: const Text('Eliminar vínculo del cotitular'),
                 ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, 'delete-co'),
+                  child: const Text(
+                    'Eliminar registro del cotitular',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
               ],
               sectionTitle('Lotes y operaciones'),
               for (final op in cv.CasaController.rows(p['operaciones'] ?? []))
@@ -315,6 +322,17 @@ extension _CommercialExtension on _CasaViewState {
       await run(() async {
         await c.chooseClient(p);
         loadPersonForm(c.selectedClient!);
+      });
+    }
+    if (action == 'delete-co' &&
+        await confirmAction(
+          'Eliminar cotitular',
+          'Se retirará su registro activo. Los datos de operaciones anteriores se conservarán.',
+        )) {
+      await run(() async {
+        await c.api.call('DELETE', '/clients/${p['cotitular']['id']}');
+        await c.refresh();
+        message('Registro del cotitular retirado.');
       });
     }
     if (action == 'unlink' &&

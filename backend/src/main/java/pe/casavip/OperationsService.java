@@ -73,7 +73,7 @@ public class OperationsService {
  private void protect(long id,boolean active,String role,Actor a){
    var old=d.row("select u.*,r.nombre as rol from usuario u join rol r on r.id=u.rol_id where u.id=? and eliminado=false",id);
    if(id==a.id()&&(!active||!role.equals(a.role())))throw new IllegalArgumentException("Conserva tu cuenta activa y su rol durante esta sesión.");
-   if("ADMINISTRADOR".equals(old.get("rol"))&&(!active||!role.equals("ADMINISTRADOR"))&&d.scalar("select count(*) from usuario u join rol r on r.id=u.rol_id where r.nombre='ADMINISTRADOR' and activo=true and eliminado=false",Integer.class)<=1)
+   if(Boolean.TRUE.equals(old.get("activo"))&&"ADMINISTRADOR".equals(old.get("rol"))&&(!active||!role.equals("ADMINISTRADOR"))&&d.scalar("select count(*) from usuario u join rol r on r.id=u.rol_id where r.nombre='ADMINISTRADOR' and activo=true and eliminado=false",Integer.class)<=1)
      throw new BusinessRules.Conflict("Debe permanecer al menos un administrador activo.");
  }
  public static void password(String password){if(password==null||password.length()<8||password.codePointCount(0,password.length())>64||password.getBytes(StandardCharsets.UTF_8).length>72)throw new IllegalArgumentException("La contraseña debe tener entre 8 y 64 caracteres y hasta 72 bytes UTF-8.");}

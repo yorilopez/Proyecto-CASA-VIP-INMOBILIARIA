@@ -106,4 +106,38 @@ class OperationsIntegrationTest {
    mvc.perform(put("/api/operations/"+id).header("Authorization",m).contentType(MediaType.APPLICATION_JSON).content(payload)).andExpect(status().isOk());
    mvc.perform(put("/api/operations/"+id).header("Authorization",m).contentType(MediaType.APPLICATION_JSON).content(payload)).andExpect(status().isConflict());assertEquals(new BigDecimal("21000.00"),jdbc.queryForObject("select precio from lote where id=3",BigDecimal.class));
  }
+ byte[] image(int color)throws Exception{var image=new java.awt.image.BufferedImage(2,2,java.awt.image.BufferedImage.TYPE_INT_RGB);image.setRGB(0,0,color);var output=new java.io.ByteArrayOutputStream();javax.imageio.ImageIO.write(image,"png",output);return output.toByteArray();}
+ long withCo()throws Exception{
+   var in=new HashMap<String,Object>(Map.of("nombre","Titular nuevo","tipo_documento","DNI","numero_documento","98123456","telefono","900123456","proyecto_id",1));
+   in.put("cotitular",Map.of("nombre","Cotitular persistido","tipo_documento","DNI","numero_documento","98123457","telefono","900123457"));
+   var updated=body(mvc.perform(put("/api/clients/"+client).header("Authorization",t).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(in))).andExpect(status().isOk()));long co=updated.get("cotitular").get("id").asLong();
+   for(long id:new long[]{client,co})for(String side:List.of("ANVERSO","REVERSO"))mvc.perform(multipart("/api/clients/"+id+"/documents/"+side).file(new MockMultipartFile("file","dni.png","image/png",image(123))).header("Authorization",t)).andExpect(status().isOk());return co;
+ }
+ @Test void clienteExistenteAdmiteCotitularYDesvincularConservaOperacion()throws Exception{
+   long co=withCo(),id=reserve(Map.of("cotitular_id",co)).get("id").asLong();
+   mvc.perform(delete("/api/clients/"+client+"/cotitular").header("Authorization",t)).andExpect(status().isOk());
+   assertNull(ops.clientProfile(client,advisor).get("cotitular"));assertTrue(json.writeValueAsString(ops.detail(id,advisor).get("datos_acordados")).contains("Cotitular persistido"));
+ }
+ @Test void reemplazarDocumentoNoBorraImagenGuardadaEnOperacion()throws Exception{
+   long co=withCo(),id=reserve(Map.of("cotitular_id",co)).get("id").asLong();var detail=ops.detail(id,admin);var docs=(List<Map<String,Object>>)detail.get("documentos");assertEquals(4,docs.size());long doc=CommercialService.id(docs.getFirst(),"id");
+   mvc.perform(multipart("/api/clients/"+client+"/documents/ANVERSO").file(new MockMultipartFile("file","nuevo.png","image/png",image(456))).header("Authorization",t)).andExpect(status().isOk());
+   byte[] prior=mvc.perform(get("/api/operations/"+id+"/documents/"+doc).header("Authorization",m)).andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();assertArrayEquals(image(123),prior);
+ }
+ @Test void administradorGestionaUsuariosSinExponerHashes()throws Exception{
+   var in=new HashMap<String,Object>(Map.of("nombre","Usuario nuevo","correo","nuevo.ops@example.invalid","telefono","900123456","rol","ASESOR","password","ClaveValida2026!","activo",true));
+   long id=body(mvc.perform(post("/api/admin/users").header("Authorization",a).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(in))).andExpect(status().isOk())).get("id").asLong();
+   in.put("nombre","Usuario actualizado");in.put("password","");mvc.perform(put("/api/admin/users/"+id).header("Authorization",a).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(in))).andExpect(status().isOk());
+   var users=body(mvc.perform(get("/api/admin/users").header("Authorization",a)).andExpect(status().isOk()));assertTrue(users.toString().contains("Usuario actualizado"));assertFalse(users.toString().contains("password_hash"));
+   mvc.perform(delete("/api/admin/users/"+id).header("Authorization",a)).andExpect(status().isOk());assertEquals(true,jdbc.queryForObject("select eliminado from usuario where id=?",Boolean.class,id));
+ }
+ @Test void otroAsesorRecibeAvisoSinAccederAOperacionNiBorrarCliente()throws Exception{
+   jdbc.update("insert into usuario(rol_id,nombre,correo,password_hash) select rol_id,'Otro asesor','otro.ops@example.invalid',password_hash from usuario where id=1");String other=token("otro.ops@example.invalid");long id=reserve(Map.of()).get("id").asLong();
+   mvc.perform(delete("/api/clients/"+client).header("Authorization",other)).andExpect(status().isForbidden());mvc.perform(get("/api/operations/"+id).header("Authorization",other)).andExpect(status().isForbidden());
+   var feed=body(mvc.perform(get("/api/notifications").header("Authorization",other)).andExpect(status().isOk()));assertTrue(feed.get("items").get(0).get("operacion_id").isNull());
+ }
+ @Test void editarVentaConservaVersionAnteriorEnAuditoria()throws Exception{
+   var r=reserve(Map.of()).deepCopy();long id=r.get("id").asLong();mvc.perform(post("/api/reservations/"+id+"/sale").header("Authorization",m).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("plan_id",r.get("plan_pago_id").asLong(),"precio",21000,"inicial",3000,"numero_cuotas",24,"contrato_firmado",true,"fecha",java.time.LocalDate.now().toString())))).andExpect(status().isOk());
+   long version=jdbc.queryForObject("select version from separacion where id=?",Long.class,id);mvc.perform(put("/api/operations/"+id).header("Authorization",m).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("version",version,"precio",20000,"inicial",4000,"numero_cuotas",20,"monto",500,"motivo","Corrección comercial autorizada")))).andExpect(status().isOk());
+   assertEquals(new BigDecimal("20000.00"),jdbc.queryForObject("select precio_final from venta where separacion_id=?",BigDecimal.class,id));assertTrue(jdbc.queryForObject("select anterior from auditoria_comercial where entidad='OPERACION' and registro_id=? and accion='CORREGIR'",String.class,id).contains("21000"));
+ }
 }

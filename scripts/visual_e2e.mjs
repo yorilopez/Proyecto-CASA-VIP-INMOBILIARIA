@@ -1,3 +1,4 @@
+import {verifyCommercialFlows} from './operations_e2e.mjs';
 import fs from 'node:fs/promises';import{spawn}from'node:child_process';import{createWriteStream}from'node:fs';import path from'node:path';import{fileURLToPath,pathToFileURL}from'node:url';import{createRequire}from'node:module';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),req=createRequire(process.env.CASA_VIP_UI_TOOLS+'/package.json'),imp=await import(pathToFileURL(req.resolve('playwright')).href),{chromium}=imp.default??imp;
 await fs.mkdir(root+'/cache/tmp',{recursive:true});process.env.TEMP=root+'/cache/tmp';process.env.TMP=process.env.TEMP;
@@ -31,5 +32,6 @@ await click('Continuar');await capture('10_separacion');await click('Revisar sep
 await click('Volver al inicio');await click('Clientes');await capture('13_clientes');await click('Operaciones');await capture('14_separaciones');
 if(!token)throw Error('No se capturó sesión de prueba');const rr=await fetch('http://127.0.0.1:18080/api/reservations',{headers:{Authorization:'Bearer '+token}});const data=await rr.json();const found=data.find(r=>r.numero_cuotas_acordado===24&&r.cliente==='Cliente Demostración')??data.find(r=>r.numero_cuotas_acordado===24);if(!found||!found.cotitular_id)throw Error('El plan 24 y el cotitular deben persistirse');
 await fs.writeFile(root+'/evidence/revision_0_4_0/navegador.json',JSON.stringify({screens:14,narrowScreen:360,realApi:true,financialSnapshot:found,errors,responses,completed:new Date().toISOString()},null,2));if(errors.length)throw Error(errors.join('\n'));
+await verifyCommercialFlows({page,root,click,enter,capture,reservation:found});
 await fs.writeFile(root+'/evidence/revision_0_4_0/revision-ui-complete.json',JSON.stringify({ok:true,screens:14,completed:new Date().toISOString()}));
 }catch(e){process.exitCode=1;console.error(String(e));await fs.writeFile(root+'/evidence/revision_0_4_0/revision-ui-error.txt',String(e));if(page){const dom=await page.locator('body').ariaSnapshot();console.error(dom);await fs.writeFile(root+'/evidence/revision_0_4_0/revision-ui-dom.txt',dom);await page.screenshot({path:root+'/evidence/revision_0_4_0/revision-ui-error.png'});}}finally{if(browser)await browser.close();server.kill();log.end();}

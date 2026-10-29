@@ -3462,6 +3462,8 @@ class _CasaViewState extends State<CasaView> {
                         tx(
                           hasReservation(assigned[i])
                               ? 'Separación activa'
+                              : hasSale(assigned[i])
+                              ? 'Venta registrada'
                               : 'Seguimiento',
                           size: 9.6,
                           color: const Color(0xff2f7042),
@@ -3910,6 +3912,11 @@ class _CasaViewState extends State<CasaView> {
       'motivo': why,
     });
     await c.refresh();
+    if (c.operation?['id'] == r['id']) {
+      c.operation = Data.from(
+        await c.api.call('GET', '/operations/${r['id']}'),
+      );
+    }
   });
   Future<void> reassign(Data r) => run(() async {
     final options = cv.CasaController.rows(
@@ -3942,6 +3949,11 @@ class _CasaViewState extends State<CasaView> {
       'motivo': why,
     });
     await c.refresh();
+    if (c.operation?['id'] == r['id']) {
+      c.operation = Data.from(
+        await c.api.call('GET', '/operations/${r['id']}'),
+      );
+    }
   });
   Future<void> sell(Data r) => sellOperation(r);
 
