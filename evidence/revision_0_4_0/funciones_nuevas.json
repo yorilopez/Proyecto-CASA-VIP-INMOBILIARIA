@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "advisorImageOnly": true,
+  "userCreated": 4,
+  "catalogPrice": 24000,
+  "reservationPrice": 21000,
+  "soldLotUnchanged": true,
+  "salePrice": 21000,
+  "saleCount": 24,
+  "sharedFiles": [
+    "operacion_CASA_VIP.txt",
+    "DNI_1_ANVERSO.png",
+    "DNI_2_REVERSO.png",
+    "DNI_3_ANVERSO.png",
+    "DNI_4_REVERSO.png"
+  ],
+  "globalSaleNotification": true,
+  "completed": "2026-10-29T19:20:05.569Z"
+}
