@@ -20,7 +20,7 @@ public final class ApiModels {
   }
 
   public record Login(
-      @NotBlank @Email @Size(max = 254) String email, @NotBlank @Size(max = 64) String password) {}
+      @NotBlank @Email @Size(max = 254) String email, @NotBlank @Size(max = 128) String password) {}
 
   public record Client(
       @NotBlank @Size(max = 160) String nombre,

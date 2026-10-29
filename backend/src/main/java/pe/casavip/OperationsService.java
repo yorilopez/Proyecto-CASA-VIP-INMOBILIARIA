@@ -77,7 +77,7 @@ public class OperationsService {
    if(Boolean.TRUE.equals(old.get("activo"))&&"ADMINISTRADOR".equals(old.get("rol"))&&(!active||!role.equals("ADMINISTRADOR"))&&d.scalar("select count(*) from usuario u join rol r on r.id=u.rol_id where r.nombre='ADMINISTRADOR' and activo=true and eliminado=false",Integer.class)<=1)
      throw new BusinessRules.Conflict("Debe permanecer al menos un administrador activo.");
  }
- public static void password(String password){if(password==null||password.length()<8||password.codePointCount(0,password.length())>64||password.getBytes(StandardCharsets.UTF_8).length>72)throw new IllegalArgumentException("La contraseña debe tener entre 8 y 64 caracteres y hasta 72 bytes UTF-8.");}
+ public static void password(String password){if(password==null||password.codePointCount(0,password.length())<8||password.codePointCount(0,password.length())>64||password.getBytes(StandardCharsets.UTF_8).length>72)throw new IllegalArgumentException("La contraseña debe tener entre 8 y 64 caracteres y hasta 72 bytes UTF-8.");}
  @Transactional public Map<String,Object> saveUser(Long id,UserInput in,Actor a){
    BusinessRules.requireAdmin(a.role());userLock();var role=d.row("select id from rol where nombre=?",in.rol());
    var before=id==null?null:d.row("select id,nombre,correo,activo,rol_id,telefono from usuario where id=? and eliminado=false",id);

@@ -498,9 +498,16 @@ extension _CommercialExtension on _CasaViewState {
   }
 
   Future<Data?> commercialDialog(Data op, {required bool sale}) async {
-    final price = TextEditingController(text: '${op['precio_acordado']}'),
-        initial = TextEditingController(text: '${op['inicial_acordada']}'),
-        count = TextEditingController(text: '${op['numero_cuotas_acordado']}'),
+    final price = TextEditingController(
+          text: '${op['venta']?['precio_final'] ?? op['precio_acordado']}',
+        ),
+        initial = TextEditingController(
+          text: '${op['venta']?['inicial'] ?? op['inicial_acordada']}',
+        ),
+        count = TextEditingController(
+          text:
+              '${op['venta']?['numero_cuotas'] ?? op['numero_cuotas_acordado']}',
+        ),
         deposit = TextEditingController(text: '${op['monto']}'),
         obs = TextEditingController(text: '${op['observacion'] ?? ''}'),
         reasonInput = TextEditingController(),
@@ -519,19 +526,21 @@ extension _CommercialExtension on _CasaViewState {
     final previous = operationSnapshot(op);
     for (final key in ['titular', 'cotitular']) {
       final record = previous[key];
-      if (record != null && !people.any((p) => p['id'] == record['id']))
+      if (record != null && !people.any((p) => p['id'] == record['id'])) {
         people.add({
           ...Data.from(record),
           'proyecto_id': op['lote_actual']['proyecto_id'],
         });
+      }
     }
     final advisors = [...c.users];
-    if (!advisors.any((u) => u['id'] == selectedAdvisor))
+    if (!advisors.any((u) => u['id'] == selectedAdvisor)) {
       advisors.add({
         'id': selectedAdvisor,
         'nombre': op['asesor_nombre'] ?? 'Usuario histórico',
         'activo': false,
       });
+    }
     if (!mounted) return null;
     final key = GlobalKey<FormState>();
     return showDialog<Data>(
@@ -1043,7 +1052,9 @@ extension _CommercialExtension on _CasaViewState {
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text('${l['proyecto']} · ${l['manzana']}-${l['lote']}'),
-            subtitle: Text('${money(l['precio'])} · ${l['estado']}'),
+            subtitle: Text(
+              'ID ${l['lote_id']} · ${money(l['precio'])} · ${l['estado']}',
+            ),
             trailing: l['estado'] == 'VENDIDO'
                 ? const Icon(Icons.lock_outline, size: 18)
                 : const Icon(Icons.edit_outlined, size: 18),

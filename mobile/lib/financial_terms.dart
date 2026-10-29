@@ -21,8 +21,9 @@ class FinancialTerms {
         i <= 0 ||
         i > p ||
         n < 1 ||
-        n > 600)
+        n > 600) {
       return null;
+    }
     return FinancialTerms(p, i, n);
   }
 

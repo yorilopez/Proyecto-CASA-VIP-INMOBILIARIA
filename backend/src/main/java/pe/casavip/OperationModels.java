@@ -13,7 +13,7 @@ public final class OperationModels {
    @PastOrPresent LocalDate fecha,boolean actualizar_personas){}
  public record UserInput(@NotBlank @Size(max=160) String nombre,@NotBlank @Email @Size(max=254) String correo,
    @NotBlank @Pattern(regexp="ASESOR|RESPONSABLE_COMERCIAL|ADMINISTRADOR") String rol,
-   @Size(max=30) String telefono,@Size(max=64) String password,boolean activo){}
+   @Size(max=30) String telefono,@Size(max=128) String password,boolean activo){}
  public record ActiveUser(boolean activo){}
  public record ReadNotifications(@PositiveOrZero long hasta){}
 }

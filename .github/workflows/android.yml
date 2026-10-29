@@ -74,6 +74,16 @@ jobs:
           mkdir -p backend/src/main/resources/static
           cp -a mobile/build/web/. backend/src/main/resources/static/
           mvn -B -f backend/pom.xml test package
+      - run: mvn -B -f backend/pom.xml -DskipTests javadoc:javadoc
+      - uses: actions/upload-artifact@v7
+        with:
+          name: CASA-VIP-Servidor-Web
+          path: |
+            backend/target/casa-vip-backend-0.4.0.jar
+            backend/target/reports/apidocs
+            backend/target/surefire-reports
+          retention-days: 30
+          if-no-files-found: error
       - name: Instalar navegador de pruebas
         run: |
           npm install --prefix "$RUNNER_TEMP/casavip-ui" playwright@1.62.1

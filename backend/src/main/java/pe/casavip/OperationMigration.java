@@ -23,7 +23,7 @@ public class OperationMigration {
        d.terms(id,price,initial,n);
      }
      d.capture(id);
-     if(!sales.isEmpty()){var now=dao.reservation(id,false);var f=OperationsDao.financial((BigDecimal)now.get("precio_acordado"),(BigDecimal)now.get("inicial_acordada"),((Number)now.get("numero_cuotas_acordado")).intValue());d.execute("update venta set numero_cuotas=?,mensualidad=?,ultima_cuota=?,datos_finales=? where separacion_id=?",f.get("numero_cuotas"),f.get("mensualidad"),f.get("ultima_cuota"),d.encode(d.snapshot(id)),id);}
+     if(!sales.isEmpty()){var now=dao.reservation(id,false);var sale=sales.getFirst();var f=OperationsDao.financial((BigDecimal)sale.get("precio_final"),(BigDecimal)sale.get("inicial"),((Number)now.get("numero_cuotas_acordado")).intValue());var finalSnapshot=new java.util.LinkedHashMap<String,Object>(d.snapshot(id));finalSnapshot.put("condiciones",f);d.execute("update venta set numero_cuotas=?,mensualidad=?,ultima_cuota=?,datos_finales=? where separacion_id=?",f.get("numero_cuotas"),f.get("mensualidad"),f.get("ultima_cuota"),d.encode(finalSnapshot),id);}
      if(!"ACTIVA".equals(s.get("estado"))&&!"CONFIRMADA".equals(s.get("estado")))d.execute("update separacion set condiciones_activas=false where id=?",id);
    }
  }
