@@ -11,8 +11,10 @@ import 'controller.dart' as cv;
 import 'platform_io.dart' as files;
 import 'prototype_style.dart';
 import 'financial_terms.dart';
+import 'listing_filter.dart';
 
 part 'commercial_extension.dart';
+part 'listing_ui.dart';
 
 void main() => runApp(const CasaVipApp());
 
@@ -96,9 +98,8 @@ class _CasaViewState extends State<CasaView> {
       separationKey = GlobalKey<FormState>(),
       sheetKey = GlobalKey(),
       receiptKey = GlobalKey();
-  int clientFilter = 0, operationFilter = 0;
   List<Data> catalogPreview = [];
-  String catalogFilename = '', historyFilter = '';
+  String catalogFilename = '';
   void repaint(VoidCallback change) => setState(change);
   final operationImageKey = GlobalKey();
   final negotiatedPrice = TextEditingController(),
@@ -248,6 +249,8 @@ class _CasaViewState extends State<CasaView> {
     filterLocation = '';
     filterStage = null;
     c.go(s);
+    if (s == 'clients') run(c.loadClients);
+    if (s == 'reservations') run(c.loadOperations);
   }
 
   void back() {
@@ -3309,84 +3312,11 @@ class _CasaViewState extends State<CasaView> {
     );
   }
 
-  bool hasReservation(Data client) => c.reservations.any(
-    (r) =>
-        r['estado'] == 'ACTIVA' &&
-        (r['cliente_id'] == client['id'] || r['cotitular_id'] == client['id']),
-  );
-  Widget tabs(
-    List<(String, int)> values,
-    int selected,
-    void Function(int) change,
-  ) => Container(
-    margin: const EdgeInsets.only(top: 16),
-    decoration: const BoxDecoration(
-      border: PrototypeBorder(bottom: BorderSide(color: Color(0xffdcd8cf))),
-    ),
-    child: Row(
-      children: [
-        for (int i = 0; i < values.length; i++)
-          Expanded(
-            child: Semantics(
-              button: true,
-              selected: selected == i,
-              child: tap(
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 10,
-                    horizontal: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    border: PrototypeBorder(
-                      bottom: BorderSide(
-                        color: selected == i ? primaryGold : Colors.transparent,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: tx(
-                          values[i].$1,
-                          size: 11.36,
-                          color: selected == i
-                              ? const Color(0xff8d6604)
-                              : const Color(0xff7d7970),
-                          weight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xffebe8e1),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: tx('${values[i].$2}', size: 9.28, color: muted),
-                      ),
-                    ],
-                  ),
-                ),
-                () => change(i),
-              ),
-            ),
-          ),
-      ],
-    ),
-  );
+  bool hasReservation(Data client) => clientOperations(client).any((r)=>r['estado']=='ACTIVA');
+  List<Data> clientOperations(Data client) => client['operaciones'] is List ? cv.CasaController.rows(client['operaciones']) : c.reservations.where((r)=>r['cliente_id']==client['id']||r['cotitular_id']==client['id']).toList();
   Widget clients() {
     final q = search.text.trim().toLowerCase();
-    final assigned = c.clients
-        .where(
-          (p) =>
-              clientFilter == 0 ||
-              (clientFilter == 1 ? hasReservation(p) : hasSale(p)),
-        )
+    final assigned = c.listedClients
         .where(
           (p) => '${p['nombre']} ${p['numero_documento']} ${p['telefono']}'
               .toLowerCase()
@@ -3403,16 +3333,12 @@ class _CasaViewState extends State<CasaView> {
             newClient();
           },
         ),
-        tabs(
-          [
-            ('Todos', c.clients.length),
-            ('Con separación', c.clients.where(hasReservation).length),
-            ('Con venta', c.clients.where(hasSale).length),
-          ],
-          clientFilter,
-          (i) => setState(() => clientFilter = i),
+        space(12),
+        clientFilterControls(),
+        sectionTitle(
+          '${assigned.length} clientes',
+          overline: monthLabel(c.clientMonth).toUpperCase(),
         ),
-        sectionTitle('Clientes asignados', overline: 'REGISTROS RECIENTES'),
         for (int i = 0; i < assigned.length; i++) ...[
           tap(
             uiBox(
@@ -3465,7 +3391,7 @@ class _CasaViewState extends State<CasaView> {
                               ? 'Separación activa'
                               : hasSale(assigned[i])
                               ? 'Venta registrada'
-                              : 'Seguimiento',
+                              : 'Cliente potencial',
                           size: 9.6,
                           color: const Color(0xff2f7042),
                           weight: FontWeight.w700,
@@ -3489,60 +3415,24 @@ class _CasaViewState extends State<CasaView> {
           space(9),
         ],
         if (assigned.isEmpty) empty('No se encontraron clientes.'),
-        space(8),
-        infoNote(
-          'Los documentos de identidad solo son visibles según permisos.',
-          compact: true,
-        ),
       ],
     );
   }
 
   Widget reservations() {
-    final active = c.reservations
-        .where((r) => r['estado'] == 'ACTIVA')
+    final all = c.listedOperations;
+    final active = all.where((r) => r['estado'] == 'ACTIVA').toList();
+    final q = search.text.trim().toLowerCase();
+    final rows = all
+        .where(
+          (r) => '${r['proyecto']} ${r['manzana']} ${r['lote']} ${r['cliente']}'
+              .toLowerCase()
+              .contains(q),
+        )
         .toList();
-    final sold = c.reservations
-        .where((r) => r['estado'] == 'CONFIRMADA')
-        .toList();
-    final released = c.reservations
-        .where((r) => ['ANULADA', 'VENCIDA'].contains(r['estado']))
-        .toList();
-    final q = search.text.toLowerCase();
-    final rows =
-        (operationFilter == 0
-                ? c.reservations
-                : operationFilter == 1
-                ? active
-                : operationFilter == 2
-                ? sold
-                : released)
-            .where(
-              (r) =>
-                  '${r['proyecto']} ${r['manzana']} ${r['lote']} ${r['cliente']}'
-                      .toLowerCase()
-                      .contains(q),
-            )
-            .toList();
-    final total = active.fold<num>(
-      0,
-      (a, b) => a + (num.tryParse('${b['monto']}') ?? 0),
-    );
-    const months = [
-      'ENERO',
-      'FEBRERO',
-      'MARZO',
-      'ABRIL',
-      'MAYO',
-      'JUNIO',
-      'JULIO',
-      'AGOSTO',
-      'SEPTIEMBRE',
-      'OCTUBRE',
-      'NOVIEMBRE',
-      'DICIEMBRE',
-    ];
-    final now = DateTime.now();
+    final saleOnly=c.operationState=='CONFIRMADA';
+    final total=(saleOnly?all:active).fold<num>(0,(a,b)=>a+(num.tryParse('${saleOnly?b['precio_final']:b['monto']}')??0));
+    final summary='${all.length} ${switch(c.operationState){'ACTIVA'=>'separaciones','CONFIRMADA'=>'ventas','LIBERADA'=>'liberadas',_=>'operaciones'}}';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -3562,12 +3452,12 @@ class _CasaViewState extends State<CasaView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     eyebrow(
-                      '${months[now.month - 1]} ${now.year}',
+                      monthLabel(c.operationMonth).toUpperCase(),
                       golden: true,
                     ),
                     space(5),
                     tx(
-                      '${active.length} separaciones activas',
+                      summary,
                       size: 16,
                       color: Colors.white,
                     ),
@@ -3584,18 +3474,18 @@ class _CasaViewState extends State<CasaView> {
             ],
           ),
         ),
-        tabs(
-          [
-            ('Todas', c.reservations.length),
-            ('Separaciones', active.length),
-            ('Ventas', sold.length),
-            ('Liberadas', released.length),
-          ],
-          operationFilter,
-          (i) => setState(() => operationFilter = i),
-        ),
         space(12),
-        searchRow('Proyecto, lote o cliente'),
+        searchRow(
+          'Proyecto, lote o cliente',
+          onFilter: operationFilters,
+          filterLabel: 'Filtrar operaciones',
+        ),
+        space(10),
+        filterSummary(
+          operationStateLabel(c.operationState),
+          c.operationMonth,
+          operationFilters,
+        ),
         space(16),
         for (int i = 0; i < rows.length; i++) ...[
           tap(
@@ -3678,7 +3568,7 @@ class _CasaViewState extends State<CasaView> {
                             ),
                             space(2),
                             tx(
-                              '${dateText(when(rows[i]['fecha_registro']))}, ${timeText(when(rows[i]['fecha_registro']))}',
+                              displayDate(rows[i]['estado']=='CONFIRMADA'?rows[i]['fecha_venta']:['ANULADA','VENCIDA'].contains(rows[i]['estado'])?rows[i]['fecha_liberacion']??rows[i]['fecha_registro']:rows[i]['fecha_registro']),
                               size: 10.88,
                               weight: FontWeight.w700,
                             ),

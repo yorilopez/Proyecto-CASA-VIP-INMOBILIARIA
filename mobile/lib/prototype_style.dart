@@ -78,26 +78,18 @@ Widget uiBox(
   ),
   child: child,
 );
-Widget brand({bool compact = false}) => ClipRRect(
-  borderRadius: BorderRadius.circular(compact ? 7 : 14),
-  child: Container(
-    width: compact ? 48 : 220,
-    height: compact ? 34 : 132,
+Widget brand({bool compact = false}) => Container(
+  width: compact ? 58 : 220,
+  height: compact ? 44 : 132,
+  padding: EdgeInsets.all(compact ? 3 : 8),
+  decoration: BoxDecoration(
     color: Colors.white,
-    alignment: Alignment.center,
-    child: OverflowBox(
-      minWidth: compact ? 58 : 230,
-      maxWidth: compact ? 58 : 230,
-      minHeight: compact ? 40 : 142,
-      maxHeight: compact ? 40 : 142,
-      child: Image.asset(
-        'assets/casa-vip-logo.png',
-        width: compact ? 58 : 230,
-        height: compact ? 40 : 142,
-        fit: BoxFit.contain,
-        semanticLabel: 'CASA VIP Inmobiliaria',
-      ),
-    ),
+    borderRadius: BorderRadius.circular(compact ? 7 : 14),
+  ),
+  child: Image.asset(
+    'assets/casa-vip-logo.png',
+    fit: BoxFit.contain,
+    semanticLabel: 'CASA VIP Inmobiliaria',
   ),
 );
 Widget eyebrow(String t, {bool golden = false}) => tx(
