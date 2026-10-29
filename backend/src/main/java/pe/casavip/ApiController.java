@@ -18,23 +18,25 @@ public class ApiController {
   private final AuthService auth;
   private final DocumentService documents;
   private final ReportService reports;
+  private final OperationsService operations;
 
   public ApiController(
       CommercialDao dao,
       CommercialService service,
       AuthService auth,
       DocumentService documents,
-      ReportService reports) {
+      ReportService reports, OperationsService operations) {
     this.dao = dao;
     this.service = service;
     this.auth = auth;
     this.documents = documents;
     this.reports = reports;
+    this.operations=operations;
   }
 
   @GetMapping("/health")
   public Object health() {
-    return Map.of("status", "UP", "version", "0.3.1");
+    return Map.of("status", "UP", "version", "0.4.0");
   }
 
   @PostMapping("/auth/login")
@@ -106,13 +108,13 @@ public class ApiController {
 
   @GetMapping("/clients/{id}")
   public Object clientProfile(@PathVariable long id, @AuthenticationPrincipal Actor actor) {
-    return service.clientProfile(id, actor);
+    return operations.clientProfile(id, actor);
   }
 
   @GetMapping("/clients")
   public Object clients(
       @AuthenticationPrincipal Actor a, @RequestParam(required = false) String q) {
-    return dao.clients(a, q);
+    return operations.clients(a, q);
   }
 
   @PostMapping("/clients")
@@ -148,7 +150,7 @@ public class ApiController {
 
   @GetMapping("/reservations")
   public Object reservations(@AuthenticationPrincipal Actor a) {
-    return dao.reservations(a);
+    return operations.operations(a);
   }
 
   @PostMapping("/reservations")

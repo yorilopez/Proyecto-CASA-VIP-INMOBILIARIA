@@ -31,6 +31,10 @@ class ApiIntegrationTest {
 
   @BeforeEach
   void clean() {
+    jdbc.update("delete from notificacion_lectura");
+    jdbc.update("delete from notificacion");
+    jdbc.update("delete from auditoria_comercial");
+    jdbc.update("delete from operacion_documento");
     jdbc.update("delete from cliente_documento");
     jdbc.update("delete from historial_lote");
     jdbc.update("delete from venta");

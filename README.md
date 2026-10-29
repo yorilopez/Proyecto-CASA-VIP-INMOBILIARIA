@@ -1,71 +1,69 @@
-# CASA VIP — Avance de proyecto 3 · revisión 0.3.1
+# CASA VIP · ampliación comercial 0.4.0
 
-Aplicación Flutter y API Java 21 / Spring Boot para el piloto académico SHENNAN HOUSE. Esta revisión reconstruye las 14 pantallas a partir del TypeScript, CSS, logotipo y capturas del prototipo aprobado del avance 2.
+Aplicativo Flutter con API Java 21 / Spring Boot y base H2 de demostración o PostgreSQL. Amplía la versión 0.3.1 conservando el diseño del prototipo del avance 2.
 
-## Cambios de esta revisión
+## Funciones nuevas
 
-Se recuperaron la composición negra y dorada, los iconos de contorno, el encabezado con avatar, la navegación inferior, las tarjetas, los estados, los formularios y los cuatro pasos de separación. El acceso solo solicita correo y contraseña; la dirección del servidor se configura al compilar y no aparece en el login.
+Login con límites de longitud; clientes existentes con cotitular; eliminación con conservación del historial; cartera con filtros de separación y venta; y navegación Operaciones para ambos tipos de registro.
 
-Los datos de dirección, correo, ocupación y cotitular se guardan en la API. Se pueden adjuntar las dos caras del documento de cada persona. Los planes de 12, 24, 36 y 48 meses se consultan por lote; la separación conserva el plan y sus condiciones calculadas por el servidor. La ficha y la constancia se comparten como imágenes de la propia interfaz.
+Cada operación conserva sus condiciones negociadas y documentos. El asesor puede ajustar inicial y cuotas; administrador y responsable comercial también pueden negociar precio y corregir operaciones guardadas con motivo y control de versión. Los cálculos usan céntimos y la última cuota absorbe el redondeo.
 
-El catálogo, las cantidades, las fechas y los nombres se obtienen de la base. Por ello pueden diferir de los valores ilustrativos del prototipo. Las funciones administrativas e historial siguen disponibles desde el avatar o el detalle correspondiente, según el rol.
+El administrador dispone de catálogo, edición e importación CSV/XLSX/JSON y gestión de usuarios. El responsable comercial puede deshabilitar usuarios y revisar historiales generales. Hay compartición por rol y notificaciones globales dentro de la aplicación.
 
-## Demostración integrada
+Consulta [Novedades y funcionamiento](docs/NOVEDADES_0_4_0.md), [matriz funcional](docs/Funciones_0_4_0.md) y [plantillas de importación](docs/plantillas).
 
-El paquete `Aplicativo_CASA_VIP_0.3.1.zip` incluye el servidor con la web Flutter incorporada. Requiere Java 21. Extraerlo en una carpeta y abrir `INICIAR_CASA_VIP.cmd`; ingresar a `http://127.0.0.1:8080`. Mantener abierta la ventana del servidor; detener con Ctrl+C.
+## Ejecutar el aplicativo integrado
+
+Extraer `Aplicativo_CASA_VIP_0.4.0.zip`, abrir `INICIAR_CASA_VIP.cmd` con Java 21 instalado y visitar `http://127.0.0.1:8080`. Mantener la ventana abierta; detener con Ctrl+C. La web Flutter ya está dentro del servidor y no requiere instalar Flutter o Maven para esta demostración.
 
 Cuentas ficticias de demostración, contraseña común `CasaVIP-demo-2026!`:
 
 | Rol | Correo |
-| --- | --- |
+|---|---|
 | Asesor | asesor@casavip.pe |
 | Responsable comercial | responsable@casavip.pe |
 | Administrador | admin@casavip.pe |
 
-La base H2 se conserva en `data/` y las imágenes privadas en `private-files/`, dentro de la carpeta del aplicativo. El perfil demo amplía de manera idempotente el catálogo y conserva los registros existentes. Para conservar una instalación anterior: detener el servidor, respaldar `data/` y `private-files/`, y copiar esas dos carpetas dentro de la nueva carpeta del aplicativo antes de iniciarlo. La revisión actualiza el esquema H2 al arrancar.
+Estas cuentas pertenecen al entorno demo. La base se conserva en `data/` y los archivos privados en `private-files/`, dentro de la carpeta donde se inicia el servidor.
 
-## Ejecución desde un celular
+## Conservar datos de la versión anterior
 
-La web usa la API del mismo origen. Para una prueba en la misma red, el iniciador `INICIAR_CASA_VIP_RED_LOCAL.cmd` escucha en las interfaces del equipo. Abrir desde el navegador del teléfono `http://IP_DEL_EQUIPO:8080`. El teléfono y el equipo deben poder comunicarse y el firewall debe permitir el puerto. La IP se utiliza en la dirección del navegador, no en un campo del login.
+Detener el servidor, respaldar `data/` y `private-files/` y copiarlas dentro de una carpeta nueva del aplicativo 0.4.0 antes del primer inicio. Conservar el respaldo. El perfil demo aplica un esquema aditivo e inicializa instantáneas faltantes. Las condiciones finales de ventas anteriores se obtienen de la venta, conservando sus importes.
 
-El APK se descarga desde el artefacto Android de GitHub Actions indicado en `DESCARGAR_APK.url`. Es una compilación debug para Android arm64. Sin configuración adicional apunta al emulador (`http://10.0.2.2:8080`). Para un teléfono físico se debe compilar con una API accesible:
+Para PostgreSQL existente en 0.3.1 aplicar `database/04_operaciones_comerciales.sql` con el servidor detenido. Para una base vacía aplicar 01, 02, 03 y 04 en orden. Configurar `DB_URL`, `DB_USER`, `DB_PASSWORD` y `PRIVATE_ROOT`, e iniciar con `--spring.profiles.active=postgres`. Este perfil no provisiona cuentas.
+
+## Ingresar desde el celular
+
+Para usar la web en la misma red, abrir `INICIAR_CASA_VIP_RED_LOCAL.cmd` y visitar `http://IP_DEL_EQUIPO:8080` desde el navegador del teléfono. El equipo y el teléfono deben poder comunicarse y el firewall debe permitir el puerto. La IP no aparece como campo del login.
+
+El APK Android arm64 de depuración se obtiene desde GitHub Actions. La compilación predeterminada utiliza la API del emulador `http://10.0.2.2:8080`. Para un teléfono físico se necesita una API accesible y definirla al compilar:
 
 ```powershell
 flutter build apk --debug --target-platform android-arm64 --dart-define=API_URL=http://IP_DEL_EQUIPO:8080
 ```
 
-También puede definirse la variable de repositorio `CASA_VIP_API_URL` para GitHub Actions. Esta configuración pertenece al entorno técnico. Los endpoint de una aplicación pueden inspeccionarse en el binario o el tráfico; retirarlos de la pantalla evita exponerlos en la interfaz, pero no los convierte en secretos de autenticación.
+También puede configurarse la variable del repositorio `CASA_VIP_API_URL` para Actions. Retirar la dirección de la interfaz no la convierte en un secreto del binario o del tráfico. Si una instalación debug anterior tiene una firma distinta, puede ser necesario desinstalarla antes de instalar el nuevo APK; la base del servidor se conserva.
 
-Las compilaciones de depuración pueden usar firmas diferentes entre ejecuciones. Si Android informa un conflicto de firma, desinstalar el APK de demostración anterior antes de instalar el nuevo; la base del servidor se conserva.
+## Compilar y probar
 
-## Construir desde fuentes
+Requisitos: JDK 21, Maven 3.9 y Flutter 3.41.9. Para Android se requiere SDK y licencias aceptadas.
 
-Requisitos: JDK 21, Maven 3.9 y Flutter 3.41.9. Para Android se necesita un SDK compatible y sus licencias aceptadas.
-
-En `mobile/` ejecutar `flutter pub get`, `flutter analyze`, `flutter test` y `flutter build web --release --no-web-resources-cdn`. Copiar `mobile/build/web/` a `backend/src/main/resources/static/`. En `backend/` ejecutar `mvn test package`.
-
-Iniciar el resultado con:
+En `mobile/` ejecutar `flutter pub get`, `flutter analyze`, `flutter test` y `flutter build web --release --no-web-resources-cdn`. Copiar `mobile/build/web/` a `backend/src/main/resources/static/`. En `backend/` ejecutar `mvn test package` y `mvn javadoc:javadoc`.
 
 ```powershell
-java -jar target/casa-vip-backend-0.3.1.jar --app.nio2=true --spring.profiles.active=demo
+java -jar target/casa-vip-backend-0.4.0.jar --app.nio2=true --spring.profiles.active=demo
 ```
 
-`--app.nio2=true` es una opción de compatibilidad del conector HTTP para este entorno Windows.
+El conector NIO2 proporciona compatibilidad con el entorno Windows utilizado. GitHub Actions ejecuta pruebas de Flutter, pruebas Java con H2 y PostgreSQL 17, compilación Android y navegador con API real. `LegacyMigrationTest` usa una base H2 independiente con esquema 0.3.1 para comprobar conservación e idempotencia.
 
-## PostgreSQL
+Las pruebas PostgreSQL requieren una base aislada con los cuatro SQL y los parámetros `-Dspring.datasource.url`, `-Dspring.datasource.username`, `-Dspring.datasource.password` y `-Dspring.sql.init.mode=never`. Las pruebas limpian registros; nunca apuntarlas a una base empresarial.
 
-Para una base nueva aplicar, en orden, los tres archivos de `database/`: `01_esquema_avance2.sql`, `02_ampliacion_avance3.sql` y `03_fidelidad_prototipo.sql`. Para una base con los dos primeros SQL, aplicar solo el tercero. La migración agrega campos y relaciones sin borrar registros.
+## Alcance de la validación
 
-Definir `DB_URL`, `DB_USER` y `DB_PASSWORD`, e iniciar con `--spring.profiles.active=postgres`. Este perfil no provisiona cuentas ni datos ficticios. Las contraseñas deben almacenarse como BCrypt. Las fotos se conservan en `PRIVATE_ROOT`.
+Los resultados y enlaces de la revisión vigente se incluyen en `VERIFICACION_0_4_0.json` de la entrega y en las ejecuciones de GitHub Actions. Los artefactos requieren acceso al repositorio privado y se conservan 30 días; las fuentes permiten reproducir las compilaciones.
 
-## Verificación y límites
+Los avisos globales se actualizan cada 15 segundos con la sesión abierta. Las notificaciones push con la app cerrada requieren un proveedor y credenciales adicionales. La cámara y el envío efectivo mediante WhatsApp todavía requieren prueba en un teléfono físico.
 
-Se ejecutaron 35 casos Java con H2 y los mismos 35 con PostgreSQL 17.6, además de 11 casos Flutter: 46 casos distintos y 81 ejecuciones. Las pruebas incluyen permisos, aislamiento entre asesores, transacciones, cotitular, cuatro fotos, planes, formulario de acceso sin servidor y adaptación a 360 px. Los registros de esta revisión están en `evidence/revision_0_3_1/`.
+Los informes académicos 0.3.1 conservan su carácter de línea base anterior. Este incremento se documenta mediante las novedades, la matriz funcional, las fuentes y las nuevas evidencias, sin atribuir resultados nuevos a capturas anteriores.
 
-La compilación Android y las comprobaciones de navegador se documentan en la entrega. La cámara y el envío a una instalación real de WhatsApp requieren validación en un teléfono físico; una compilación y una prueba web no sustituyen esa validación.
-
-El informe acumulativo, la matriz y la presentación se actualizaron para 0.3.1. La matriz clasifica 30 de 33 requisitos completos (90,9 % por conteo sin ponderación); RF-12, RF-27 y RF-32 permanecen parciales. El prototipo y los archivos originales del avance 2 se conservaron.
-
-Estudiante: Lopez Huaman, Yori Yasser — U21231292. Trabajo elaborado con asistencia de IA y sujeto a revisión y sustentación del estudiante.
-
-La última comprobación integrada aprobó en [GitHub Actions](https://github.com/yorilopez/Proyecto-CASA-VIP-INMOBILIARIA/actions/runs/40899104478). El [APK](https://github.com/yorilopez/Proyecto-CASA-VIP-INMOBILIARIA/actions/runs/40899104478/artifacts/12907684576) y las [capturas vigentes](https://github.com/yorilopez/Proyecto-CASA-VIP-INMOBILIARIA/actions/runs/40899104478/artifacts/12908263137) se descargan por separado; requieren acceso al repositorio privado y tienen retención de 30 días. La procedencia de las capturas locales se detalla en `evidence/revision_0_3_1/LEEME_REVISION.md`.
+Estudiante: Lopez Huaman, Yori Yasser — U21231292. Trabajo con asistencia de IA, sujeto a revisión y sustentación del estudiante.

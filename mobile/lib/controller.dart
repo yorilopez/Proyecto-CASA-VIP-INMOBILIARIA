@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'api.dart';
 
@@ -6,6 +7,13 @@ typedef Row = Map<String, dynamic>;
 /// Coordina el flujo del prototipo con datos devueltos por la API.
 class CasaController extends ChangeNotifier {
   final ApiClient api;
+  Timer? _notificationsTimer;
+  bool _polling = false;
+  Row? operation;
+  List<Row> notifications = [], users = [], catalog = [], history = [];
+  int unread = 0;
+  num? agreedPrice, agreedInitial;
+  int? agreedCount;
   CasaController(this.api);
   String screen = 'login';
   Row? user,
@@ -36,6 +44,11 @@ class CasaController extends ChangeNotifier {
     api.token = data['token'];
     user = Map<String, dynamic>.from(data['user']);
     await refresh();
+    _notificationsTimer?.cancel();
+    _notificationsTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => pollNotifications(),
+    );
     go('home');
   }
 
@@ -43,6 +56,28 @@ class CasaController extends ChangeNotifier {
     projects = rows(await api.call('GET', '/projects'));
     clients = rows(await api.call('GET', '/clients'));
     reservations = rows(await api.call('GET', '/reservations'));
+    await pollNotifications();
+  }
+
+  Future<void> pollNotifications() async {
+    if (_polling || api.token == null) return;
+    _polling = true;
+    try {
+      final data = await api.call('GET', '/notifications');
+      notifications = rows(data['items']);
+      unread = (data['pendientes'] as num).toInt();
+      notifyListeners();
+    } catch (e) {
+      if (e is ApiException && e.status == 401) clear();
+    } finally {
+      _polling = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _notificationsTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> logout() async {
@@ -54,6 +89,13 @@ class CasaController extends ChangeNotifier {
   }
 
   void clear() {
+    _notificationsTimer?.cancel();
+    notifications = [];
+    users = [];
+    catalog = [];
+    history = [];
+    unread = 0;
+    operation = null;
     api.token = null;
     user = null;
     project = null;
@@ -94,6 +136,9 @@ class CasaController extends ChangeNotifier {
   }
 
   Future<void> selectLot(Row l) async {
+    agreedPrice = null;
+    agreedInitial = null;
+    agreedCount = null;
     lot = Map<String, dynamic>.from(await api.call('GET', '/lots/${l['id']}'));
     final p = rows(lot!['planes']);
     selectedPlan = p.isEmpty ? null : p.last;
@@ -114,6 +159,10 @@ class CasaController extends ChangeNotifier {
         input,
       ),
     );
+    if (input['quitar_cotitular'] == true) {
+      await api.call('DELETE', '/clients/${selectedClient!['id']}/cotitular');
+      selectedClient!.remove('cotitular');
+    }
     coClient = selectedClient!['cotitular'] == null
         ? null
         : Map<String, dynamic>.from(selectedClient!['cotitular']);
@@ -143,7 +192,7 @@ class CasaController extends ChangeNotifier {
         ? null
         : Map<String, dynamic>.from(selectedClient!['cotitular']);
     await loadDocuments();
-    go('documents');
+    go('client-form');
   }
 
   Future<void> reserve(num amount, String observation) async {
@@ -155,6 +204,10 @@ class CasaController extends ChangeNotifier {
         'observacion': observation,
         if (selectedPlan != null) 'plan_id': selectedPlan!['id'],
         if (coClient != null) 'cotitular_id': coClient!['id'],
+        if (agreedPrice != null) 'precio_acordado': agreedPrice,
+        if (agreedInitial != null) 'inicial_acordada': agreedInitial,
+        if (agreedCount != null) 'numero_cuotas_acordado': agreedCount,
+        if (lot!['version'] != null) 'version_catalogo': lot!['version'],
       }),
     );
     await refresh();

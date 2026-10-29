@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
+import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +10,9 @@ import 'api.dart';
 import 'controller.dart' as cv;
 import 'platform_io.dart' as files;
 import 'prototype_style.dart';
+import 'financial_terms.dart';
+
+part 'commercial_extension.dart';
 
 void main() => runApp(const CasaVipApp());
 
@@ -90,11 +96,16 @@ class _CasaViewState extends State<CasaView> {
       separationKey = GlobalKey<FormState>(),
       sheetKey = GlobalKey(),
       receiptKey = GlobalKey();
-  bool busy = false,
-      confirmed = false,
-      withCo = false,
-      clientsWithReservation = false,
-      reservationHistory = false;
+  int clientFilter = 0, operationFilter = 0;
+  List<Data> catalogPreview = [];
+  String catalogFilename = '', historyFilter = '';
+  void repaint(VoidCallback change) => setState(change);
+  final operationImageKey = GlobalKey();
+  final negotiatedPrice = TextEditingController(),
+      negotiatedInitial = TextEditingController(),
+      negotiatedCount = TextEditingController();
+  int? draftLot;
+  bool busy = false, confirmed = false, withCo = false;
   String chip = 'Todos',
       filterState = '',
       filterLocation = '',
@@ -189,6 +200,9 @@ class _CasaViewState extends State<CasaView> {
       amount,
       observation,
       search,
+      negotiatedPrice,
+      negotiatedInitial,
+      negotiatedCount,
     ]) {
       t.dispose();
     }
@@ -227,6 +241,7 @@ class _CasaViewState extends State<CasaView> {
   }
 
   void go(String s) {
+    if (s == 'clients') c.lot = null;
     search.clear();
     chip = 'Todos';
     filterState = '';
@@ -245,6 +260,7 @@ class _CasaViewState extends State<CasaView> {
       'documents' => 'client-form',
       'separation' => 'documents',
       'review' => 'separation',
+      'operation-detail' => 'reservations',
       _ => 'home',
     });
   }
@@ -309,6 +325,8 @@ class _CasaViewState extends State<CasaView> {
     String? hint,
     TextInputType? keyboard,
     int lines = 1,
+    int? maxLength,
+    void Function(String)? onChanged,
     String? Function(String?)? validate,
   }) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,6 +345,9 @@ class _CasaViewState extends State<CasaView> {
           controller: controller,
           obscureText: obscure,
           maxLines: lines,
+          maxLength: maxLength,
+          maxLengthEnforcement: MaxLengthEnforcement.none,
+          onChanged: onChanged,
           keyboardType: keyboard,
           style: const TextStyle(fontSize: 14.4, height: 1.2, color: ink),
           autofillHints: label == 'Correo corporativo'
@@ -352,13 +373,15 @@ class _CasaViewState extends State<CasaView> {
                 ? null
                 : const BoxConstraints(minWidth: 40, maxWidth: 40),
           ),
-          validator:
-              validate ??
-              (required
-                  ? (v) => v == null || v.trim().isEmpty
-                        ? 'Completa este campo.'
-                        : null
-                  : null),
+          validator: (value) {
+            if (maxLength != null && (value?.runes.length ?? 0) > maxLength) {
+              return 'Máximo $maxLength caracteres.';
+            }
+            if (validate != null) return validate(value);
+            return required && (value == null || value.trim().isEmpty)
+                ? 'Completa este campo.'
+                : null;
+          },
         ),
       ),
     ],
@@ -416,6 +439,19 @@ class _CasaViewState extends State<CasaView> {
               ),
             ),
             const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Notificaciones',
+              onPressed: () => go('notifications'),
+              icon: Badge(
+                isLabelVisible: c.unread > 0,
+                label: Text('${c.unread > 99 ? '99+' : c.unread}'),
+                child: const Icon(
+                  Icons.notifications_outlined,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ),
             PopupMenuButton<String>(
               tooltip: 'Mi cuenta',
               padding: EdgeInsets.zero,
@@ -449,6 +485,18 @@ class _CasaViewState extends State<CasaView> {
                     value: 'excel',
                     child: Text('Exportar reporte Excel'),
                   ),
+                if (c.admin)
+                  const PopupMenuItem(
+                    value: 'catalog',
+                    child: Text('Catálogo y precios'),
+                  ),
+                if (c.manager)
+                  const PopupMenuItem(value: 'users', child: Text('Usuarios')),
+                if (c.manager)
+                  const PopupMenuItem(
+                    value: 'history-all',
+                    child: Text('Historiales comerciales'),
+                  ),
                 const PopupMenuItem(
                   value: 'logout',
                   child: Text('Cerrar sesión'),
@@ -460,6 +508,10 @@ class _CasaViewState extends State<CasaView> {
         ),
       );
   void accountAction(String action) {
+    if (['catalog', 'users', 'history-all'].contains(action)) {
+      openManagement(action);
+      return;
+    }
     if (action == 'logout') {
       run(c.logout);
     }
@@ -494,7 +546,7 @@ class _CasaViewState extends State<CasaView> {
           ('home', 'Inicio', 'house'),
           ('projects', 'Proyectos', 'building-2'),
           ('clients', 'Clientes', 'users-round'),
-          ('reservations', 'Separaciones', 'file-text'),
+          ('reservations', 'Operaciones', 'file-text'),
         ])
           Expanded(
             child: Builder(
@@ -562,7 +614,12 @@ class _CasaViewState extends State<CasaView> {
                       'separation' => 'Datos de separación',
                       'review' => 'Confirmar separación',
                       'clients' => 'Clientes',
-                      'reservations' => 'Separaciones',
+                      'reservations' => 'Operaciones',
+                      'operation-detail' => 'Detalle de operación',
+                      'notifications' => 'Notificaciones',
+                      'users' => 'Usuarios',
+                      'catalog' => 'Catálogo y precios',
+                      'history-all' => 'Historiales comerciales',
                       _ => 'CASA VIP',
                     },
                     switch (screen) {
@@ -684,6 +741,11 @@ class _CasaViewState extends State<CasaView> {
     'review' => review(),
     'clients' => clients(),
     'reservations' => reservations(),
+    'operation-detail' => operationPage(),
+    'notifications' => notificationPage(),
+    'users' => usersPage(),
+    'catalog' => catalogPage(),
+    'history-all' => historyPage(),
     _ => const SizedBox.shrink(),
   };
   Widget login() => ColoredBox(
@@ -765,6 +827,7 @@ class _CasaViewState extends State<CasaView> {
                   field(
                     'Correo corporativo',
                     email,
+                    maxLength: 254,
                     required: true,
                     icon: 'user-round',
                     hint: 'asesor@casavip.pe',
@@ -774,6 +837,12 @@ class _CasaViewState extends State<CasaView> {
                   field(
                     'Contraseña',
                     password,
+                    maxLength: 64,
+                    validate: (v) => v == null || v.isEmpty
+                        ? 'Completa este campo.'
+                        : utf8.encode(v).length > 72
+                        ? 'La contraseña supera 72 bytes UTF-8.'
+                        : null,
                     required: true,
                     obscure: true,
                     icon: 'lock-keyhole',
@@ -827,6 +896,7 @@ class _CasaViewState extends State<CasaView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (c.manager) managementShortcuts(),
         Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -2401,6 +2471,10 @@ class _CasaViewState extends State<CasaView> {
                     compact: true,
                   ),
                   space(14),
+                  TextButton(
+                    onPressed: () => selectExistingCo(ctx),
+                    child: const Text('Seleccionar cotitular registrado'),
+                  ),
                   personFields(co: true),
                   space(18),
                   primary('Guardar cotitular', () {
@@ -2454,6 +2528,12 @@ class _CasaViewState extends State<CasaView> {
           top: 0,
         ),
         infoNote('Usa los datos tal como aparecen en el DNI.', compact: true),
+        space(14),
+        primary(
+          'Seleccionar cliente existente',
+          selectExistingClient,
+          outline: true,
+        ),
         space(14),
         personFields(),
         space(16),
@@ -2558,7 +2638,12 @@ class _CasaViewState extends State<CasaView> {
             }
             await c.saveClient({
               ...personInput(),
-              'proyecto_id': c.project?['id'] ?? c.projects.first['id'],
+              'proyecto_id':
+                  c.selectedClient?['proyecto_id'] ??
+                  c.project?['id'] ??
+                  c.projects.first['id'],
+              'quitar_cotitular':
+                  !withCo && c.selectedClient?['cotitular'] != null,
               if (withCo) 'cotitular': personInput(co: true),
             });
           }),
@@ -2714,9 +2799,10 @@ class _CasaViewState extends State<CasaView> {
   }
 
   Widget separation() {
+    ensureDraftTerms();
     final l = c.lot!,
-        price = num.tryParse('${l['precio']}') ?? 0,
-        initial = num.tryParse('${plan['inicial']}') ?? 0;
+        price = c.agreedPrice ?? 0,
+        initial = c.agreedInitial ?? 0;
     return Form(
       key: separationKey,
       child: Column(
@@ -2807,13 +2893,18 @@ class _CasaViewState extends State<CasaView> {
                           ? primaryGold
                           : const Color(0xffd8d4cb),
                     ),
-                    () => setState(() => c.selectedPlan = plans[i]),
+                    () => setState(() {
+                      c.selectedPlan = plans[i];
+                      resetDraftPlan();
+                    }),
                     label: '${plans[i]['numero_cuotas']} meses',
                   ),
                 ),
               ],
             ],
           ),
+          space(14),
+          negotiatedFields(),
           space(14),
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
@@ -2829,7 +2920,7 @@ class _CasaViewState extends State<CasaView> {
                   paymentRow('Saldo financiado', money(price - initial)),
                   paymentRow(
                     'Cuota mensual',
-                    money(plan['monto_cuota']),
+                    money(draftMonthly),
                     highlight: true,
                   ),
                 ],
@@ -2844,6 +2935,10 @@ class _CasaViewState extends State<CasaView> {
             final value = num.tryParse(amount.text.replaceAll(',', '.'));
             if (value == null || value <= 0 || value > price) {
               message('Ingresa un monto mayor que cero y dentro del precio.');
+              return;
+            }
+            if (!validDraftTerms()) {
+              message('Revisa precio, inicial y número de cuotas (1 a 600).');
               return;
             }
             if (c.selectedPlan == null) {
@@ -2948,7 +3043,7 @@ class _CasaViewState extends State<CasaView> {
               'wallet-cards',
               'Condiciones',
               '${money(amount.text.replaceAll(',', '.'))} de separación',
-              'Inicial ${money(plan['inicial'])} · ${plan['numero_cuotas']} cuotas de ${money(plan['monto_cuota'])}',
+              'Inicial ${money(c.agreedInitial ?? plan['inicial'])} · ${c.agreedCount ?? plan['numero_cuotas']} cuotas de ${money(draftMonthly)}',
             ),
           ],
         ),
@@ -3287,7 +3382,11 @@ class _CasaViewState extends State<CasaView> {
   Widget clients() {
     final q = search.text.trim().toLowerCase();
     final assigned = c.clients
-        .where((p) => !clientsWithReservation || hasReservation(p))
+        .where(
+          (p) =>
+              clientFilter == 0 ||
+              (clientFilter == 1 ? hasReservation(p) : hasSale(p)),
+        )
         .where(
           (p) => '${p['nombre']} ${p['numero_documento']} ${p['telefono']}'
               .toLowerCase()
@@ -3308,9 +3407,10 @@ class _CasaViewState extends State<CasaView> {
           [
             ('Todos', c.clients.length),
             ('Con separación', c.clients.where(hasReservation).length),
+            ('Con venta', c.clients.where(hasSale).length),
           ],
-          clientsWithReservation ? 1 : 0,
-          (i) => setState(() => clientsWithReservation = i == 1),
+          clientFilter,
+          (i) => setState(() => clientFilter = i),
         ),
         sectionTitle('Clientes asignados', overline: 'REGISTROS RECIENTES'),
         for (int i = 0; i < assigned.length; i++) ...[
@@ -3363,6 +3463,8 @@ class _CasaViewState extends State<CasaView> {
                         tx(
                           hasReservation(assigned[i])
                               ? 'Separación activa'
+                              : hasSale(assigned[i])
+                              ? 'Venta registrada'
                               : 'Seguimiento',
                           size: 9.6,
                           color: const Color(0xff2f7042),
@@ -3400,10 +3502,28 @@ class _CasaViewState extends State<CasaView> {
     final active = c.reservations
         .where((r) => r['estado'] == 'ACTIVA')
         .toList();
-    final history = c.reservations
-        .where((r) => r['estado'] != 'ACTIVA')
+    final sold = c.reservations
+        .where((r) => r['estado'] == 'CONFIRMADA')
         .toList();
-    final rows = reservationHistory ? history : active;
+    final released = c.reservations
+        .where((r) => ['ANULADA', 'VENCIDA'].contains(r['estado']))
+        .toList();
+    final q = search.text.toLowerCase();
+    final rows =
+        (operationFilter == 0
+                ? c.reservations
+                : operationFilter == 1
+                ? active
+                : operationFilter == 2
+                ? sold
+                : released)
+            .where(
+              (r) =>
+                  '${r['proyecto']} ${r['manzana']} ${r['lote']} ${r['cliente']}'
+                      .toLowerCase()
+                      .contains(q),
+            )
+            .toList();
     final total = active.fold<num>(
       0,
       (a, b) => a + (num.tryParse('${b['monto']}') ?? 0),
@@ -3465,10 +3585,17 @@ class _CasaViewState extends State<CasaView> {
           ),
         ),
         tabs(
-          [('Activas', active.length), ('Historial', history.length)],
-          reservationHistory ? 1 : 0,
-          (i) => setState(() => reservationHistory = i == 1),
+          [
+            ('Todas', c.reservations.length),
+            ('Separaciones', active.length),
+            ('Ventas', sold.length),
+            ('Liberadas', released.length),
+          ],
+          operationFilter,
+          (i) => setState(() => operationFilter = i),
         ),
+        space(12),
+        searchRow('Proyecto, lote o cliente'),
         space(16),
         for (int i = 0; i < rows.length; i++) ...[
           tap(
@@ -3479,7 +3606,11 @@ class _CasaViewState extends State<CasaView> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      statusBadge(rows[i]['estado']),
+                      statusBadge(
+                        rows[i]['estado'] == 'CONFIRMADA'
+                            ? 'VENDIDO'
+                            : rows[i]['estado'],
+                      ),
                       tx(
                         reservationCode(rows[i]),
                         size: 9.6,
@@ -3517,13 +3648,19 @@ class _CasaViewState extends State<CasaView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             tx(
-                              'Separación',
+                              rows[i]['estado'] == 'CONFIRMADA'
+                                  ? 'Precio de venta'
+                                  : 'Separación',
                               size: 9.28,
                               color: const Color(0xff858178),
                             ),
                             space(2),
                             tx(
-                              money(rows[i]['monto']),
+                              money(
+                                rows[i]['estado'] == 'CONFIRMADA'
+                                    ? rows[i]['precio_final']
+                                    : rows[i]['monto'],
+                              ),
                               size: 10.88,
                               weight: FontWeight.w700,
                             ),
@@ -3559,12 +3696,7 @@ class _CasaViewState extends State<CasaView> {
           ),
           space(10),
         ],
-        if (rows.isEmpty)
-          empty(
-            reservationHistory
-                ? 'Todavía no hay operaciones en el historial.'
-                : 'Todavía no hay separaciones activas.',
-          ),
+        if (rows.isEmpty) empty('No hay operaciones con este filtro.'),
       ],
     );
   }
@@ -3739,151 +3871,8 @@ class _CasaViewState extends State<CasaView> {
     );
   }
 
-  Future<void> clientProfile(Data input) => run(() async {
-    final profile = Map<String, dynamic>.from(
-      await c.api.call('GET', '/clients/${input['id']}'),
-    );
-    final docs = cv.CasaController.rows(
-      await c.api.call('GET', '/clients/${input['id']}/documents'),
-    );
-    if (!mounted) return;
-    bool useForOperation = false;
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      backgroundColor: paper,
-      builder: (ctx) => ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(ctx).height * .8,
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              sectionTitle('${profile['nombre']}', top: 0),
-              tx(
-                '${profile['tipo_documento']} ${profile['numero_documento']}',
-                weight: FontWeight.w700,
-              ),
-              space(10),
-              for (final pair in [
-                ('Teléfono', profile['telefono']),
-                ('Dirección', profile['direccion']),
-                ('Correo', profile['correo']),
-                ('Ocupación', profile['ocupacion']),
-              ])
-                if ('${pair.$2 ?? ''}'.isNotEmpty) ...[
-                  tx('${pair.$1}: ${pair.$2}', size: 13, color: muted),
-                  space(8),
-                ],
-              if (profile['cotitular'] != null) ...[
-                space(8),
-                tx(
-                  'Cotitular: ${profile['cotitular']['nombre']}',
-                  size: 13,
-                  weight: FontWeight.w700,
-                ),
-              ],
-              if (docs.isNotEmpty) ...[
-                space(10),
-                tx('Documentos privados', weight: FontWeight.w700),
-                for (final d in docs)
-                  TextButton(
-                    onPressed: () async {
-                      try {
-                        final b = await c.api.bytes('/documents/${d['id']}');
-                        if (!ctx.mounted) return;
-                        await showDialog<void>(
-                          context: ctx,
-                          builder: (dialog) => AlertDialog(
-                            title: Text('DNI · ${d['lado']}'),
-                            content: Image.memory(b),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(dialog),
-                                child: const Text('Cerrar'),
-                              ),
-                            ],
-                          ),
-                        );
-                      } catch (_) {
-                        message('No se pudo abrir el documento.');
-                      }
-                    },
-                    child: Text(
-                      'Ver ${d['lado'] == 'ANVERSO' ? 'anverso' : 'reverso'}',
-                    ),
-                  ),
-              ],
-              if (c.lot != null && c.lot!['estado'] == 'DISPONIBLE') ...[
-                space(18),
-                primary('Usar para esta separación', () {
-                  Navigator.pop(ctx);
-                  useForOperation = true;
-                }),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-    if (useForOperation) await c.chooseClient(profile);
-  });
-  Future<void> reservationDetail(Data r) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: paper,
-      builder: (ctx) => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            sectionTitle(reservationCode(r), top: 0),
-            tx(
-              '${projectName(r['proyecto'])} · ${r['manzana']}-${r['lote']}',
-              weight: FontWeight.w700,
-            ),
-            space(8),
-            tx('Titular: ${r['cliente']}'),
-            space(8),
-            tx('Separación: ${money(r['monto'])}'),
-            if (r['numero_cuotas_acordado'] != null) ...[
-              space(8),
-              tx(
-                '${r['numero_cuotas_acordado']} cuotas de ${money(r['cuota_acordada'])}',
-                size: 13,
-                color: muted,
-              ),
-            ],
-            space(12),
-            statusBadge(r['estado']),
-            if (c.manager && r['estado'] == 'ACTIVA') ...[
-              space(20),
-              primary('Liberar reserva', () {
-                Navigator.pop(ctx);
-                release(r);
-              }, outline: true),
-              space(9),
-              primary('Reasignar lote', () {
-                Navigator.pop(ctx);
-                reassign(r);
-              }, outline: true),
-              space(9),
-              primary('Registrar venta', () {
-                Navigator.pop(ctx);
-                sell(r);
-              }),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
+  Future<void> clientProfile(Data input) => extendedClientProfile(input);
+  Future<void> reservationDetail(Data r) => openOperation(r);
 
   Future<String?> reason(String title) async {
     final input = TextEditingController();
@@ -3924,6 +3913,11 @@ class _CasaViewState extends State<CasaView> {
       'motivo': why,
     });
     await c.refresh();
+    if (c.operation?['id'] == r['id']) {
+      c.operation = Data.from(
+        await c.api.call('GET', '/operations/${r['id']}'),
+      );
+    }
   });
   Future<void> reassign(Data r) => run(() async {
     final options = cv.CasaController.rows(
@@ -3956,102 +3950,14 @@ class _CasaViewState extends State<CasaView> {
       'motivo': why,
     });
     await c.refresh();
-  });
-  Future<void> sell(Data r) => run(() async {
-    final l = await c.api.call('GET', '/lots/${r['lote_id']}');
-    if (!mounted) return;
-    final price = TextEditingController(text: '${l['precio']}'),
-        initial = TextEditingController(text: '${l['inicial']}');
-    final pp = cv.CasaController.rows(l['planes']);
-    if (pp.isEmpty) {
-      throw ApiException('El lote no cuenta con planes vigentes.');
+    if (c.operation?['id'] == r['id']) {
+      c.operation = Data.from(
+        await c.api.call('GET', '/operations/${r['id']}'),
+      );
     }
-    Data selected = pp.last;
-    bool signed = false;
-    final key = GlobalKey<FormState>();
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, update) => AlertDialog(
-          title: const Text('Registrar venta'),
-          content: SingleChildScrollView(
-            child: Form(
-              key: key,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  field(
-                    'Precio final (S/)',
-                    price,
-                    required: true,
-                    keyboard: TextInputType.number,
-                  ),
-                  space(14),
-                  field(
-                    'Inicial (S/)',
-                    initial,
-                    required: true,
-                    keyboard: TextInputType.number,
-                  ),
-                  space(14),
-                  DropdownButtonFormField<int>(
-                    initialValue: (selected['id'] as num).toInt(),
-                    decoration: const InputDecoration(labelText: 'Plan'),
-                    items: [
-                      for (final p in pp)
-                        DropdownMenuItem(
-                          value: (p['id'] as num).toInt(),
-                          child: Text('${p['numero_cuotas']} meses'),
-                        ),
-                    ],
-                    onChanged: (id) => update(
-                      () => selected = pp.firstWhere((p) => p['id'] == id),
-                    ),
-                  ),
-                  CheckboxListTile(
-                    value: signed,
-                    onChanged: (v) => update(() => signed = v ?? false),
-                    title: const Text(
-                      'Confirmo contrato firmado',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: signed
-                  ? () {
-                      if (key.currentState!.validate()) {
-                        Navigator.pop(ctx, true);
-                      }
-                    }
-                  : null,
-              child: const Text('Confirmar venta'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (accepted == true) {
-      await c.api.call('POST', '/reservations/${r['id']}/sale', {
-        'plan_id': selected['id'],
-        'precio': num.tryParse(price.text),
-        'inicial': num.tryParse(initial.text),
-        'contrato_firmado': true,
-        'fecha': DateTime.now().toIso8601String().substring(0, 10),
-      });
-      await c.refresh();
-    }
-    price.dispose();
-    initial.dispose();
   });
+  Future<void> sell(Data r) => sellOperation(r);
+
   Future<void> adminState() => run(() async {
     final l = c.lot!;
     final next = l['estado'] == 'DISPONIBLE' ? 'NO_DISPONIBLE' : 'DISPONIBLE';

@@ -16,11 +16,13 @@ public class DocumentService {
   private final CommercialDao dao;
   private final CommercialService commercial;
   private final Path root;
+  private final OperationsDao ledger;
 
   public DocumentService(
-      CommercialDao dao, CommercialService commercial, @Value("${app.private-root}") String root) {
+      CommercialDao dao, CommercialService commercial, OperationsDao ledger, @Value("${app.private-root}") String root) {
     this.dao = dao;
     this.commercial = commercial;
+    this.ledger=ledger;
     this.root = Path.of(root).toAbsolutePath().normalize();
   }
 
@@ -72,7 +74,7 @@ public class DocumentService {
           public void afterCompletion(int status) {
             try {
               if (status != STATUS_COMMITTED) Files.deleteIfExists(dest);
-              else if (previous != null)
+              else if (previous != null && !ledger.retained((String)previous.get("ruta_privada")))
                 Files.deleteIfExists(safe((String) previous.get("ruta_privada")));
             } catch (IOException ignored) {
             }
@@ -80,6 +82,11 @@ public class DocumentService {
         });
   }
 
+  public byte[] readOperation(long operation,long document,Actor actor)throws IOException {
+    BusinessRules.requireManager(actor.role());
+    var d=ledger.row("select ruta_privada from operacion_documento where id=? and separacion_id=?",document,operation);
+    return Files.readAllBytes(safe((String)d.get("ruta_privada")));
+  }
   private Path safe(String name) {
     Path p = root.resolve(name).normalize();
     if (!p.startsWith(root)) throw new BusinessRules.Forbidden("Ruta no permitida.");

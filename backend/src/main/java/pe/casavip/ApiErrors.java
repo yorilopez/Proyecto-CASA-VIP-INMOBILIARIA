@@ -38,6 +38,8 @@ public class ApiErrors {
   ResponseEntity<?> validation(MethodArgumentNotValidException e) {
     return response(400, "Revisa los campos obligatorios y sus formatos.");
   }
+  @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+  ResponseEntity<?> unreadable() {return response(400,"Revisa los tipos y el formato de los datos enviados.");}
 
   @ExceptionHandler(ResponseStatusException.class)
   ResponseEntity<?> status(ResponseStatusException e) {

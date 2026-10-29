@@ -11,6 +11,7 @@ import 'package:casa_vip/controller.dart' as cv;
 class Fixture {
   int reservations = 0, loginCalls = 0;
   bool reject = false;
+  List<Map<String, dynamic>> clientRows = [], operationRows = [];
   Map<String, dynamic>? reservationInput, clientInput;
   final documents = <String, List<Map<String, dynamic>>>{};
   final selectedPlans = [
@@ -56,6 +57,8 @@ class Fixture {
     'ubicacion': 'Huacho, Lima',
     'etapa': 'Etapa 1',
     'etapa_id': 1,
+    'proyecto_id': 1,
+    'version': 0,
     'inicial': 3000,
     'numero_cuotas': 48,
     'planes': selectedPlans,
@@ -65,7 +68,9 @@ class Fixture {
     client: MockClient((request) async {
       final path = request.url.path;
       dynamic data;
-      if (path.endsWith('/auth/login')) {
+      if (path.endsWith('/notifications')) {
+        data = {'items': [], 'pendientes': 0};
+      } else if (path.endsWith('/auth/login')) {
         loginCalls++;
         if (reject) {
           return http.Response(
@@ -105,6 +110,8 @@ class Fixture {
             'codigo': 'B',
             'etapa': 'Etapa 1',
             'etapa_id': 1,
+            'proyecto_id': 1,
+            'version': 0,
             'total': 2,
             'disponibles': 1,
           },
@@ -136,8 +143,11 @@ class Fixture {
         if (clientInput!['cotitular'] != null) {
           data['cotitular'] = {...clientInput!['cotitular'], 'id': 11};
         }
+      } else if (RegExp(r'/clients/\d+$').hasMatch(path) &&
+          request.method == 'GET') {
+        data = clientRows.firstWhere((c) => path.endsWith('/${c['id']}'));
       } else if (path.endsWith('/clients')) {
-        data = [];
+        data = clientRows;
       } else if (path.endsWith('/reservations') && request.method == 'POST') {
         reservations++;
         reservationInput = jsonDecode(request.body);
@@ -149,7 +159,7 @@ class Fixture {
           'numero_cuotas_acordado': 24,
         };
       } else if (path.endsWith('/reservations')) {
-        data = [];
+        data = operationRows;
       } else {
         data = {'ok': true};
       }
@@ -456,4 +466,131 @@ void main() {
       controller.dispose();
     },
   );
+  testWidgets(
+    'El login rechaza el exceso de caracteres sin enviar credenciales',
+    (t) async {
+      dimensions(t);
+      final f = Fixture();
+      await t.pumpWidget(CasaVipApp(api: f.api));
+      await enter(t, 'Correo corporativo', '${'a' * 250}@a.pe');
+      await enter(t, 'Contraseña', 'CasaVIP-demo-2026!');
+      await tapText(t, 'Ingresar');
+      expect(f.loginCalls, 0);
+      expect(find.text('Máximo 254 caracteres.'), findsOneWidget);
+      await enter(t, 'Correo corporativo', 'asesor@casavip.pe');
+      await enter(t, 'Contraseña', 'x' * 65);
+      await tapText(t, 'Ingresar');
+      expect(f.loginCalls, 0);
+      expect(find.text('Máximo 64 caracteres.'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
+  testWidgets('Inicial y cuotas negociadas se envían sin cambiar el catálogo', (
+    t,
+  ) async {
+    dimensions(t);
+    mockFiles();
+    final f = Fixture();
+    await t.pumpWidget(CasaVipApp(api: f.api));
+    await openLot(t);
+    await tapText(t, 'Separar lote');
+    await fillPerson(t);
+    await tapText(t, 'Continuar');
+    await photos(t);
+    await tapText(t, 'Continuar');
+    await enter(t, 'Inicial acordada (S/)', '5000');
+    await enter(t, 'Número de cuotas acordado', '31');
+    await tapText(t, 'Revisar separación');
+    await t.ensureVisible(find.byType(Checkbox));
+    await t.tap(find.byType(Checkbox));
+    await t.pumpAndSettle();
+    await tapText(t, 'Confirmar separación');
+    expect(f.reservationInput!['inicial_acordada'], 5000);
+    expect(f.reservationInput!['numero_cuotas_acordado'], 31);
+    expect(f.reservationInput!['precio_acordado'], 21000);
+    expect(f.lot['precio'], 21000);
+    expect(t.takeException(), isNull);
+  });
+  testWidgets('Seleccionar un cliente registrado permite agregar cotitular', (
+    t,
+  ) async {
+    dimensions(t);
+    final f = Fixture();
+    f.clientRows = [
+      {
+        'id': 10,
+        'nombre': 'Cliente existente',
+        'tipo_documento': 'DNI',
+        'numero_documento': '00123456',
+        'telefono': '900123456',
+        'proyecto_id': 1,
+      },
+    ];
+    await t.pumpWidget(CasaVipApp(api: f.api));
+    await openLot(t);
+    await tapText(t, 'Separar lote');
+    await tapText(t, 'Seleccionar cliente existente');
+    await tapText(t, 'Cliente existente');
+    await t.ensureVisible(find.byType(Switch));
+    await t.tap(find.byType(Switch));
+    await t.pumpAndSettle();
+    await fillPerson(t, co: true);
+    await tapText(t, 'Guardar cotitular');
+    await tapText(t, 'Continuar');
+    expect(f.clientInput!['numero_documento'], '00123456');
+    expect(f.clientInput!['cotitular']['numero_documento'], '00000112');
+    expect(find.text('Documentos de identidad'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+  testWidgets('Clientes distingue separaciones y ventas', (t) async {
+    dimensions(t);
+    final f = Fixture();
+    f.clientRows = [
+      {
+        'id': 10,
+        'nombre': 'Cliente reservado',
+        'numero_documento': '00123456',
+        'tipo_documento': 'DNI',
+      },
+      {
+        'id': 11,
+        'nombre': 'Cliente vendido',
+        'numero_documento': '00123457',
+        'tipo_documento': 'DNI',
+      },
+    ];
+    f.operationRows = [
+      {
+        'id': 1,
+        'cliente_id': 10,
+        'estado': 'ACTIVA',
+        'monto': 500,
+        'proyecto': 'SHENNAN HOUSE',
+        'manzana': 'B',
+        'lote': '6',
+        'cliente': 'Cliente reservado',
+      },
+      {
+        'id': 2,
+        'cliente_id': 11,
+        'estado': 'CONFIRMADA',
+        'monto': 500,
+        'proyecto': 'SHENNAN HOUSE',
+        'manzana': 'B',
+        'lote': '7',
+        'cliente': 'Cliente vendido',
+      },
+    ];
+    await t.pumpWidget(CasaVipApp(api: f.api));
+    await login(t);
+    await tapText(t, 'Clientes');
+    await tapText(t, 'Con venta');
+    expect(find.text('Cliente vendido'), findsOneWidget);
+    expect(find.text('Cliente reservado'), findsNothing);
+    await tapText(t, 'Con separación');
+    expect(find.text('Cliente reservado'), findsOneWidget);
+    expect(find.text('Cliente vendido'), findsNothing);
+    expect(find.text('Operaciones'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
 }
