@@ -90,4 +90,25 @@ class ApiClient {
     );
     check(response);
   }
+
+  Future<Map<String, dynamic>> previewCatalog(
+    Uint8List bytes,
+    String name,
+  ) async {
+    final request = http.MultipartRequest(
+      'POST',
+      uri('/admin/catalog/preview'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: name),
+    );
+    final response = await http.Response.fromStream(
+      await client.send(request).timeout(const Duration(seconds: 30)),
+    );
+    check(response);
+    return Map<String, dynamic>.from(
+      jsonDecode(utf8.decode(response.bodyBytes)),
+    );
+  }
 }

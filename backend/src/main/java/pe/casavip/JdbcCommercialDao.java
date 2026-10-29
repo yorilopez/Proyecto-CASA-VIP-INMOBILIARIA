@@ -43,7 +43,7 @@ public class JdbcCommercialDao implements CommercialDao {
   public Map<String, Object> user(String email) {
     return optional(
         "select u.id,u.correo,u.nombre,u.telefono,u.password_hash,r.nombre as rol from usuario u"
-            + " join rol r on r.id=u.rol_id where lower(u.correo)=lower(?) and u.activo=true",
+            + " join rol r on r.id=u.rol_id where lower(u.correo)=lower(?) and u.activo=true and u.eliminado=false",
         email);
   }
 
@@ -51,7 +51,7 @@ public class JdbcCommercialDao implements CommercialDao {
     return optional(
         "select u.id,u.nombre,u.telefono,r.nombre as rol from sesion s join usuario u on"
             + " u.id=s.usuario_id join rol r on r.id=u.rol_id where s.token_hash=? and s.expira>?"
-            + " and u.activo=true",
+            + " and u.activo=true and u.eliminado=false",
         hash,
         Timestamp.from(java.time.Instant.now()));
   }
@@ -95,7 +95,7 @@ public class JdbcCommercialDao implements CommercialDao {
   }
 
   private static final String LOT_SQL =
-      "select l.id,l.manzana_id,l.codigo,l.area_m2,l.precio,l.estado,l.ubicacion as"
+      "select l.id,l.manzana_id,l.codigo,l.area_m2,l.precio,l.estado,l.version,l.ubicacion as"
           + " referencia,m.codigo as manzana,e.id as etapa_id,e.nombre as"
           + " etapa,e.proyecto_id,p.nombre as proyecto,p.ubicacion,(select min(pp.inicial) from"
           + " lote_plan_pago lp join plan_pago pp on pp.id=lp.plan_pago_id where lp.lote_id=l.id"
@@ -152,8 +152,8 @@ public class JdbcCommercialDao implements CommercialDao {
   public List<Map<String, Object>> clients(Actor actor, String q) {
     String sql =
         "select"
-            + " id,tipo_documento,numero_documento,nombre,telefono,correo,direccion,ocupacion,proyecto_id,asesor_id"
-            + " from cliente where (?=true or asesor_id=?) and (lower(nombre) like ? or"
+            + " id,tipo_documento,numero_documento,nombre,telefono,correo,direccion,ocupacion,proyecto_id,asesor_id,activo"
+            + " from cliente where activo=true and (?=true or asesor_id=?) and (lower(nombre) like ? or"
             + " numero_documento like ? or telefono like ?) order by id desc";
     String term = "%" + (q == null ? "" : q.toLowerCase(Locale.ROOT)) + "%";
     return jdbc.queryForList(sql, actor.manager(), actor.id(), term, term, term);
@@ -162,7 +162,7 @@ public class JdbcCommercialDao implements CommercialDao {
   public Map<String, Object> client(long id) {
     return one(
         "select"
-            + " id,tipo_documento,numero_documento,nombre,telefono,correo,direccion,ocupacion,proyecto_id,asesor_id"
+            + " id,tipo_documento,numero_documento,nombre,telefono,correo,direccion,ocupacion,proyecto_id,asesor_id,activo"
             + " from cliente where id=?",
         id);
   }
@@ -170,7 +170,7 @@ public class JdbcCommercialDao implements CommercialDao {
   public Map<String, Object> clientByDocument(String type, String number) {
     return optional(
         "select"
-            + " id,tipo_documento,numero_documento,nombre,telefono,correo,direccion,ocupacion,proyecto_id,asesor_id"
+            + " id,tipo_documento,numero_documento,nombre,telefono,correo,direccion,ocupacion,proyecto_id,asesor_id,activo"
             + " from cliente where tipo_documento=? and numero_documento=?",
         type,
         number);

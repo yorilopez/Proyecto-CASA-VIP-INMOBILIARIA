@@ -27,6 +27,8 @@ public class AuthService {
   }
 
   public Map<String, Object> login(Login in) {
+    if(in.password().codePointCount(0,in.password().length())>64 || in.password().getBytes(java.nio.charset.StandardCharsets.UTF_8).length>72)
+      throw new IllegalArgumentException("La contraseña supera el límite de caracteres o bytes permitido.");
     String key = in.email().strip().toLowerCase(Locale.ROOT);
     AtomicInteger count = failures.asMap().computeIfAbsent(key, k -> new AtomicInteger());
     if (count.get() >= 5)

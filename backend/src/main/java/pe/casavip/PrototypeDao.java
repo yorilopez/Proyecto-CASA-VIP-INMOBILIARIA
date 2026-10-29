@@ -33,6 +33,7 @@ public class PrototypeDao {
   }
 
   public void link(long titular, long cotitular) {
+    jdbc.update("delete from cliente_relacion where cliente_id=? and tipo='COTITULAR' and relacionado_id<>?",titular,cotitular);
     jdbc.update(
         "insert into cliente_relacion(cliente_id,relacionado_id,tipo) select ?,?,'COTITULAR' where"
             + " not exists (select 1 from cliente_relacion where cliente_id=? and relacionado_id=?"
@@ -57,7 +58,7 @@ public class PrototypeDao {
     var rows =
         jdbc.queryForList(
             "select c.* from cliente c join cliente_relacion r on r.relacionado_id=c.id where"
-                + " r.cliente_id=? and r.tipo='COTITULAR' order by r.id desc",
+                + " r.cliente_id=? and r.tipo='COTITULAR' and c.activo=true order by r.id desc",
             titular);
     return rows.isEmpty() ? null : rows.getFirst();
   }

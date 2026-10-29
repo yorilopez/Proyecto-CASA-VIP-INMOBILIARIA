@@ -13,11 +13,13 @@ import pe.casavip.ApiModels.*;
 public class CommercialService {
   private final CommercialDao dao;
   private final PrototypeDao prototype;
+  private final OperationsDao ledger;
   private static final Logger log = LoggerFactory.getLogger(CommercialService.class);
 
-  public CommercialService(CommercialDao dao, PrototypeDao prototype) {
+  public CommercialService(CommercialDao dao, PrototypeDao prototype, OperationsDao ledger) {
     this.dao = dao;
     this.prototype = prototype;
+    this.ledger = ledger;
   }
 
   public static long id(Map<String, Object> r, String key) {
@@ -33,7 +35,9 @@ public class CommercialService {
 
   @Transactional
   public Map<String, Object> addClient(Client input, Actor actor) {
-    return attachCo(savePerson(input, actor), input, actor);
+    var saved=attachCo(savePerson(input, actor), input, actor);
+    ledger.audit(actor,"CLIENTE",id(saved,"id"),"REGISTRAR","Registro o selección de cliente",null,saved);
+    return saved;
   }
 
   @Transactional
@@ -56,7 +60,9 @@ public class CommercialService {
             optional(input.ocupacion()),
             input.cotitular());
     prototype.person(id, clean);
-    return attachCo(dao.client(id), clean, actor);
+    var saved=attachCo(dao.client(id),clean,actor);
+    ledger.audit(actor,"CLIENTE",id,"MODIFICAR","Datos de cliente actualizados",prior,saved);
+    return saved;
   }
 
   private Map<String, Object> attachCo(Map<String, Object> primary, Client input, Actor actor) {
@@ -80,9 +86,11 @@ public class CommercialService {
         throw new IllegalArgumentException("El cotitular debe ser una persona diferente.");
       if (id(secondary, "proyecto_id") != input.proyecto_id())
         throw new IllegalArgumentException("El cotitular debe pertenecer al mismo proyecto.");
+      prototype.person(cotitular,new Client(BusinessRules.text(co.nombre(),160),co.tipo_documento(),BusinessRules.document(co.numero_documento()),co.telefono(),co.correo(),input.proyecto_id(),optional(co.direccion()),optional(co.ocupacion()),null));
       prototype.link(titular, cotitular);
       primary.put("cotitular", secondary);
     }
+    if(input.cotitular()==null){var existing=prototype.coClient(id(primary,"id"));if(existing!=null)primary.put("cotitular",existing);}
     return primary;
   }
 
@@ -92,7 +100,11 @@ public class CommercialService {
     if (type.equals("DNI") && !number.matches("[0-9]{8}"))
       throw new IllegalArgumentException("El DNI debe contener 8 digitos.");
     var prior = dao.clientByDocument(type, number);
-    if (prior != null) return client(id(prior, "id"), actor);
+    if (prior != null) {
+      var existing=client(id(prior,"id"),actor);
+      if(Boolean.FALSE.equals(existing.get("activo")))throw new BusinessRules.Conflict("El cliente fue retirado del registro activo.");
+      return existing;
+    }
     var clean =
         new Client(
             BusinessRules.text(input.nombre(), 160),
@@ -134,9 +146,17 @@ public class CommercialService {
   public Map<String, Object> reserve(Reservation in, Actor a) {
     var lot = dao.lot(in.lote_id(), true);
     BusinessRules.requireAvailable((String) lot.get("estado"));
-    client(in.cliente_id(), a);
+    var primary=client(in.cliente_id(), a);
+    if(Boolean.FALSE.equals(primary.get("activo")))throw new IllegalArgumentException("El cliente está retirado del registro activo.");
+    if(id(primary,"proyecto_id")!=id(lot,"proyecto_id"))throw new IllegalArgumentException("Selecciona un cliente del proyecto del lote.");
+    if(in.version_catalogo()!=null&&in.version_catalogo()!=id(lot,"version"))throw new BusinessRules.Conflict("Los precios del catálogo cambiaron. Revisa el lote nuevamente.");
     BusinessRules.amount(in.monto(), (BigDecimal) lot.get("precio"));
     var plan = selectedPlan(lot, in.plan_id());
+    var price=in.precio_acordado()==null?(BigDecimal)lot.get("precio"):in.precio_acordado();
+    if(!a.manager()&&price.compareTo((BigDecimal)lot.get("precio"))!=0)throw new BusinessRules.Forbidden("El asesor puede ajustar inicial y cuotas, conservando el precio del lote.");
+    var initial=in.inicial_acordada()!=null?in.inicial_acordada():plan==null?price:(BigDecimal)plan.get("inicial");
+    int count=in.numero_cuotas_acordado()!=null?in.numero_cuotas_acordado():plan==null?1:((Number)plan.get("numero_cuotas")).intValue();
+    OperationsDao.financial(price,initial,count);BusinessRules.amount(in.monto(),price);
     if (in.cotitular_id() != null) {
       client(in.cotitular_id(), a);
       if (!prototype.linked(in.cliente_id(), in.cotitular_id()))
@@ -150,8 +170,10 @@ public class CommercialService {
     }
     long id = dao.reserve(in.lote_id(), in.cliente_id(), a.id(), in.monto(), in.observacion());
     prototype.terms(id, lot, plan, in.cotitular_id());
+    ledger.terms(id,price,initial,count);
     dao.lotState(in.lote_id(), "RESERVADO");
     dao.history(in.lote_id(), a.id(), id, "DISPONIBLE", "RESERVADO", "Separacion registrada");
+    ledger.created(id,a);
     log.info("separacion_creada id={} lote={} actor={}", id, in.lote_id(), a.id());
     return dao.reservation(id, false);
   }
@@ -172,6 +194,7 @@ public class CommercialService {
     if (!"RESERVADO".equals(row.get("estado")))
       throw new BusinessRules.Conflict("El estado del lote no coincide con la reserva.");
     dao.reservationState(id, "ANULADA");
+    ledger.released(id,a,reason);
     dao.lotState(lot, "DISPONIBLE");
     dao.history(lot, a.id(), id, "RESERVADO", "DISPONIBLE", BusinessRules.text(reason, 180));
     log.info("reserva_liberada id={} actor={}", id, a.id());
@@ -204,6 +227,8 @@ public class CommercialService {
     dao.lotState(input.lote_id(), "RESERVADO");
     dao.history(previous, a.id(), id, "RESERVADO", "DISPONIBLE", reason);
     dao.history(input.lote_id(), a.id(), id, "DISPONIBLE", "RESERVADO", reason);
+    ledger.capture(id);
+    ledger.audit(a,"OPERACION",id,"REASIGNAR",reason,r,dao.reservation(id,false));
     log.info("reserva_reasignada id={} actor={}", id, a.id());
   }
 
@@ -221,11 +246,14 @@ public class CommercialService {
       throw new IllegalArgumentException("Se requiere contrato firmado y fecha valida.");
     BusinessRules.amount(in.inicial(), in.precio());
     if (((java.util.List<?>) lot.get("planes"))
-        .stream().noneMatch(p -> id((Map<String, Object>) p, "id") == in.plan_id()))
+        .stream().noneMatch(p -> id((Map<String, Object>) p, "id") == in.plan_id())
+        && (r.get("plan_pago_id")==null || id(r,"plan_pago_id")!=in.plan_id()))
       throw new IllegalArgumentException("Selecciona un plan vigente del lote.");
+    OperationsDao.financial(in.precio(),in.inicial(),in.numero_cuotas()!=null?in.numero_cuotas():r.get("numero_cuotas_acordado")==null?1:((Number)r.get("numero_cuotas_acordado")).intValue());
     dao.sale(id, a.id(), in);
     dao.reservationState(id, "CONFIRMADA");
     dao.lotState(lotId, "VENDIDO");
+    ledger.sold(id,a,in.precio(),in.inicial(),in.numero_cuotas());
     dao.history(lotId, a.id(), id, "RESERVADO", "VENDIDO", "Venta confirmada con contrato firmado");
   }
 

@@ -56,6 +56,8 @@ class Fixture {
     'ubicacion': 'Huacho, Lima',
     'etapa': 'Etapa 1',
     'etapa_id': 1,
+    'proyecto_id':1,
+    'version':0,
     'inicial': 3000,
     'numero_cuotas': 48,
     'planes': selectedPlans,
@@ -65,7 +67,8 @@ class Fixture {
     client: MockClient((request) async {
       final path = request.url.path;
       dynamic data;
-      if (path.endsWith('/auth/login')) {
+      if(path.endsWith('/notifications')) {data={'items':[],'pendientes':0};}
+      else if (path.endsWith('/auth/login')) {
         loginCalls++;
         if (reject) {
           return http.Response(
@@ -105,6 +108,8 @@ class Fixture {
             'codigo': 'B',
             'etapa': 'Etapa 1',
             'etapa_id': 1,
+    'proyecto_id':1,
+    'version':0,
             'total': 2,
             'disponibles': 1,
           },

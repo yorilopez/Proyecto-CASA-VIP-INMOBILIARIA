@@ -20,7 +20,7 @@ public final class ApiModels {
   }
 
   public record Login(
-      @NotBlank @Email @Size(max = 120) String email, @NotBlank @Size(max = 100) String password) {}
+      @NotBlank @Email @Size(max = 254) String email, @NotBlank @Size(max = 64) String password) {}
 
   public record Client(
       @NotBlank @Size(max = 160) String nombre,
@@ -67,7 +67,14 @@ public final class ApiModels {
       @NotNull @DecimalMin("0.01") BigDecimal monto,
       @Size(max = 500) String observacion,
       @Positive Long plan_id,
-      @Positive Long cotitular_id) {
+      @Positive Long cotitular_id,
+      @DecimalMin("0.01") BigDecimal precio_acordado,
+      @DecimalMin("0.01") BigDecimal inicial_acordada,
+      @Min(1) @Max(600) Integer numero_cuotas_acordado,
+      @PositiveOrZero Long version_catalogo) {
+    public Reservation(long lote_id,long cliente_id,BigDecimal monto,String observacion,Long plan_id,Long cotitular_id) {
+      this(lote_id,cliente_id,monto,observacion,plan_id,cotitular_id,null,null,null,null);
+    }
     public Reservation(long lote_id, long cliente_id, BigDecimal monto, String observacion) {
       this(lote_id, cliente_id, monto, observacion, null, null);
     }
@@ -82,5 +89,10 @@ public final class ApiModels {
       @NotNull @DecimalMin("0.01") BigDecimal precio,
       @NotNull @DecimalMin("0.01") BigDecimal inicial,
       @AssertTrue boolean contrato_firmado,
-      @NotNull @PastOrPresent LocalDate fecha) {}
+      @NotNull @PastOrPresent LocalDate fecha,
+      @Min(1) @Max(600) Integer numero_cuotas) {
+    public Sale(long plan_id,BigDecimal precio,BigDecimal inicial,boolean contrato_firmado,LocalDate fecha) {
+      this(plan_id,precio,inicial,contrato_firmado,fecha,null);
+    }
+  }
 }

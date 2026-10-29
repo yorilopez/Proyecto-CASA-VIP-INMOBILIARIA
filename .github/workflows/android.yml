@@ -52,7 +52,7 @@ jobs:
 
   web-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
         with:
@@ -73,7 +73,7 @@ jobs:
       - run: |
           mkdir -p backend/src/main/resources/static
           cp -a mobile/build/web/. backend/src/main/resources/static/
-          mvn -B -f backend/pom.xml -DskipTests package
+          mvn -B -f backend/pom.xml test package
       - name: Instalar navegador de pruebas
         run: |
           npm install --prefix "$RUNNER_TEMP/casavip-ui" playwright@1.62.1
@@ -86,7 +86,43 @@ jobs:
         if: always()
         with:
           name: CASA-VIP-Web-Evidencias
-          path: evidence/revision_0_3_1
+          path: evidence/revision_0_4_0
           retention-days: 30
           if-no-files-found: error
+
+  postgres-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: casa_vip_test
+          POSTGRES_USER: casavip_test
+          POSTGRES_PASSWORD: casavip_ci_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U casavip_test -d casa_vip_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Crear base aislada de pruebas
+        env:
+          PGPASSWORD: casavip_ci_test
+        run: |
+          for sql in database/0*.sql; do psql -h 127.0.0.1 -U casavip_test -d casa_vip_test -v ON_ERROR_STOP=1 -f "$sql"; done
+      - name: Suite con PostgreSQL
+        run: mvn -B -f backend/pom.xml test -Dspring.datasource.url=jdbc:postgresql://127.0.0.1:5432/casa_vip_test -Dspring.datasource.username=casavip_test -Dspring.datasource.password=casavip_ci_test -Dspring.sql.init.mode=never
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: CASA-VIP-Pruebas-PostgreSQL
+          path: backend/target/surefire-reports
+          retention-days: 30
 

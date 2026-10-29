@@ -16,6 +16,7 @@ import java.util.UUID
 class MainActivity : FlutterActivity() {
     private var pending: MethodChannel.Result? = null
     private var capture: File? = null
+    private var catalogMode = false
     private val requestImage = 4101
     private val maximumBytes = 5 * 1024 * 1024
 
@@ -24,7 +25,40 @@ class MainActivity : FlutterActivity() {
         MethodChannel(engine.dartExecutor.binaryMessenger, "pe.casavip/files")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "pickFile" -> {
+                        if(pending!=null) result.error("BUSY","Hay una selección pendiente.",null)
+                        else { pending=result;catalogMode=true
+                            try { startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                type="*/*";addCategory(Intent.CATEGORY_OPENABLE)
+                                putExtra(Intent.EXTRA_MIME_TYPES,arrayOf("text/csv","text/plain","application/json","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            },requestImage) } catch(_:Exception) { pending=null;catalogMode=false;result.error("PICK_FAILED","No se pudo abrir el selector de archivos.",null) }
+                        }
+                    }
+                    "shareBundle" -> {
+                        try {
+                            val items=call.argument<List<Map<String,Any>>>("files") ?: emptyList()
+                            val folder=File(cacheDir,"shared").apply { mkdirs() }
+                            val uris=ArrayList<android.net.Uri>()
+                            for(item in items) {
+                                val bytes=item["bytes"] as ByteArray
+                                val file=File(folder,"${UUID.randomUUID()}_${File(item["name"] as String).name}")
+                                file.writeBytes(bytes);uris.add(FileProvider.getUriForFile(this,"$packageName.files",file))
+                            }
+                            val intent=Intent(if(uris.isEmpty())Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply {
+                                type=if(uris.isEmpty())"text/plain" else "image/*"
+                                putExtra(Intent.EXTRA_TEXT,call.argument<String>("text") ?: "")
+                                if(uris.isNotEmpty()) {
+                                    putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris)
+                                    val clips=ClipData.newRawUri("CASA VIP",uris[0]);uris.drop(1).forEach { clips.addItem(ClipData.Item(it)) };clipData=clips
+                                }
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            startActivity(Intent.createChooser(intent,"Compartir operación"));result.success(null)
+                        } catch(_:Exception) { result.error("SHARE_FAILED","No se pudo compartir la operación.",null) }
+                    }
                     "pickImage" -> {
+                        catalogMode=false
                         if (pending != null) {
                             result.error("BUSY", "Hay una selección pendiente.", null)
                         } else {
@@ -120,12 +154,19 @@ class MainActivity : FlutterActivity() {
                 output.toByteArray()
             }
             val extension = if (mime == "image/jpeg") "jpg" else "png"
-            reply.success(mapOf("bytes" to bytes, "name" to "fotografia.$extension"))
+            var filename="fotografia.$extension"
+            if(catalogMode && selected!=null) {
+                contentResolver.query(selected,arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),null,null,null)?.use { cursor ->
+                    if(cursor.moveToFirst()) filename=File(cursor.getString(0)).name
+                }
+            }
+            reply.success(mapOf("bytes" to bytes, "name" to filename))
         } catch (_: Exception) {
             reply.error("READ_FAILED", "Selecciona una imagen PNG o JPEG de hasta 5 MB.", null)
         } finally {
             capture?.delete()
             capture = null
+            catalogMode=false
         }
     }
 }
