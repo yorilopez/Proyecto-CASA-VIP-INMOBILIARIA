@@ -193,6 +193,7 @@ CREATE TABLE IF NOT EXISTS notificacion (
  titulo VARCHAR(160) NOT NULL, mensaje VARCHAR(500) NOT NULL,
  fecha TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
+ALTER TABLE operacion_documento ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE;
 CREATE TABLE IF NOT EXISTS notificacion_lectura (
  usuario_id BIGINT NOT NULL REFERENCES usuario(id), notificacion_id BIGINT NOT NULL REFERENCES notificacion(id),
  fecha TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), PRIMARY KEY(usuario_id,notificacion_id)

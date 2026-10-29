@@ -150,7 +150,6 @@ public class CommercialService {
     if(Boolean.FALSE.equals(primary.get("activo")))throw new IllegalArgumentException("El cliente está retirado del registro activo.");
     if(id(primary,"proyecto_id")!=id(lot,"proyecto_id"))throw new IllegalArgumentException("Selecciona un cliente del proyecto del lote.");
     if(in.version_catalogo()!=null&&in.version_catalogo()!=id(lot,"version"))throw new BusinessRules.Conflict("Los precios del catálogo cambiaron. Revisa el lote nuevamente.");
-    BusinessRules.amount(in.monto(), (BigDecimal) lot.get("precio"));
     var plan = selectedPlan(lot, in.plan_id());
     var price=in.precio_acordado()==null?(BigDecimal)lot.get("precio"):in.precio_acordado();
     if(!a.manager()&&price.compareTo((BigDecimal)lot.get("precio"))!=0)throw new BusinessRules.Forbidden("El asesor puede ajustar inicial y cuotas, conservando el precio del lote.");

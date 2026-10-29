@@ -240,6 +240,7 @@ class _CasaViewState extends State<CasaView> {
   }
 
   void go(String s) {
+    if (s == 'clients') c.lot = null;
     search.clear();
     chip = 'Todos';
     filterState = '';
@@ -372,8 +373,9 @@ class _CasaViewState extends State<CasaView> {
                 : const BoxConstraints(minWidth: 40, maxWidth: 40),
           ),
           validator: (value) {
-            if (maxLength != null && (value?.runes.length ?? 0) > maxLength)
+            if (maxLength != null && (value?.runes.length ?? 0) > maxLength) {
               return 'Máximo $maxLength caracteres.';
+            }
             if (validate != null) return validate(value);
             return required && (value == null || value.trim().isEmpty)
                 ? 'Completa este campo.'

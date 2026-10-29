@@ -62,6 +62,8 @@ public class OperationsDao {
   }
   public void capture(long id) {
     jdbc.update("update separacion set datos_acordados=? where id=?",encode(snapshot(id)),id);
+    jdbc.update("update operacion_documento set activo=false where separacion_id=?",id);
+    jdbc.update("update operacion_documento set activo=true where separacion_id=? and ruta_privada in (select cd.ruta_privada from cliente_documento cd join separacion s on s.id=? where cd.cliente_id=s.cliente_id or cd.cliente_id=s.cotitular_id)",id,id);
     jdbc.update("insert into operacion_documento(separacion_id,persona,lado,ruta_privada) select ?,c.nombre,d.lado,d.ruta_privada from cliente_documento d join cliente c on c.id=d.cliente_id join separacion s on s.id=? where (d.cliente_id=s.cliente_id or d.cliente_id=s.cotitular_id) and not exists(select 1 from operacion_documento od where od.separacion_id=? and od.ruta_privada=d.ruta_privada)",id,id,id);
   }
   public void notify(long id,String type) {

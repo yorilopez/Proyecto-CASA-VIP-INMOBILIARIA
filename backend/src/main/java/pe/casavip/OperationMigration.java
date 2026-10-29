@@ -13,6 +13,8 @@ public class OperationMigration {
  @EventListener(ApplicationReadyEvent.class) @Transactional public void migrate(){
    for(var s:d.list("select * from separacion where datos_acordados is null")){
      long id=CommercialService.id(s,"id");var lot=dao.lot(CommercialService.id(s,"lote_id"),false);
+     var available=(java.util.List<java.util.Map<String,Object>>)lot.get("planes");
+     if(s.get("plan_pago_id")==null&&!available.isEmpty())d.execute("update separacion set plan_pago_id=? where id=?",available.getLast().get("id"),id);
      var sales=d.list("select * from venta where separacion_id=?",id);
      if(s.get("precio_acordado")==null||s.get("inicial_acordada")==null||s.get("numero_cuotas_acordado")==null){
        var plans=(java.util.List<java.util.Map<String,Object>>)lot.get("planes");var plan=plans.isEmpty()?null:plans.getLast();

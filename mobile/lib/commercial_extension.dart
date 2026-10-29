@@ -1,6 +1,6 @@
 part of 'main.dart';
 
-extension CommercialExtension on _CasaViewState {
+extension _CommercialExtension on _CasaViewState {
   num monthlyForInputs(String price, String initial, String count) {
     final n = int.tryParse(count) ?? 0;
     if (n < 1) return 0;
@@ -321,22 +321,24 @@ extension CommercialExtension on _CasaViewState {
         await confirmAction(
           'Eliminar cotitular',
           'Se retirará el vínculo para nuevas operaciones. Los registros anteriores se conservarán.',
-        ))
+        )) {
       await run(() async {
         await c.api.call('DELETE', '/clients/${p['id']}/cotitular');
         await c.refresh();
         message('Cotitular desvinculado.');
       });
+    }
     if (action == 'delete' &&
         await confirmAction(
           'Eliminar cliente',
           'Se retirará de la cartera activa. Sus operaciones y datos históricos se conservarán.',
-        ))
+        )) {
       await run(() async {
         await c.api.call('DELETE', '/clients/${p['id']}');
         await c.refresh();
         message('Cliente retirado de la cartera.');
       });
+    }
   }
 
   Future<void> openOperation(Data row) => run(() async {
@@ -506,8 +508,9 @@ extension CommercialExtension on _CasaViewState {
     int? selectedClient = (op['cliente_id'] as num?)?.toInt(),
         selectedCo = (op['cotitular_id'] as num?)?.toInt(),
         selectedAdvisor = (op['asesor_id'] as num?)?.toInt();
-    if (!sale)
+    if (!sale) {
       c.users = cv.CasaController.rows(await c.api.call('GET', '/admin/users'));
+    }
     if (!mounted) return null;
     final key = GlobalKey<FormState>();
     return showDialog<Data>(
@@ -750,16 +753,19 @@ extension CommercialExtension on _CasaViewState {
     ),
   );
   Future<void> openManagement(String screen) => run(() async {
-    if (screen == 'users')
+    if (screen == 'users') {
       c.users = cv.CasaController.rows(await c.api.call('GET', '/admin/users'));
-    if (screen == 'catalog')
+    }
+    if (screen == 'catalog') {
       c.catalog = cv.CasaController.rows(
         await c.api.call('GET', '/admin/catalog'),
       );
-    if (screen == 'history-all')
+    }
+    if (screen == 'history-all') {
       c.history = cv.CasaController.rows(
         await c.api.call('GET', '/admin/history'),
       );
+    }
     go(screen);
   });
   Widget usersPage() => Column(
@@ -822,8 +828,9 @@ extension CommercialExtension on _CasaViewState {
     if (!await confirmAction(
       active ? 'Habilitar usuario' : 'Deshabilitar usuario',
       '${u['nombre']}. ${active ? 'Recuperará el acceso.' : 'Se cerrarán sus sesiones activas.'}',
-    ))
+    )) {
       return;
+    }
     await run(() async {
       await c.api.call('PATCH', '/admin/users/${u['id']}/active', {
         'activo': active,
@@ -836,8 +843,9 @@ extension CommercialExtension on _CasaViewState {
     if (!await confirmAction(
       'Eliminar usuario',
       'La cuenta dejará de estar disponible. Sus operaciones históricas se conservarán.',
-    ))
+    )) {
       return;
+    }
     await run(() async {
       await c.api.call('DELETE', '/admin/users/${u['id']}');
       c.users = cv.CasaController.rows(await c.api.call('GET', '/admin/users'));
@@ -922,7 +930,7 @@ extension CommercialExtension on _CasaViewState {
             ),
             FilledButton(
               onPressed: () {
-                if (key.currentState!.validate())
+                if (key.currentState!.validate()) {
                   Navigator.pop(ctx, {
                     'nombre': name.text,
                     'correo': emailInput.text,
@@ -931,6 +939,7 @@ extension CommercialExtension on _CasaViewState {
                     'password': pass.text,
                     'activo': active,
                   });
+                }
               },
               child: const Text('Guardar'),
             ),

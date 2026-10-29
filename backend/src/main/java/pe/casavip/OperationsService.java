@@ -27,7 +27,7 @@ public class OperationsService {
    var sales=d.list("select * from venta where separacion_id=?",id);
    if(!sales.isEmpty()){var v=sales.getFirst();v.put("datos_finales",d.decode(v.get("datos_finales")));r.put("venta",v);}
    var lot=commercial.lot(id(r,"lote_id"),false);r.put("lote_actual",lot);
-   if(a.manager())r.put("documentos",d.list("select id,persona,lado from operacion_documento where separacion_id=? order by id",id));
+   if(a.manager())r.put("documentos",d.list("select id,persona,lado from operacion_documento where separacion_id=? and activo=true order by id",id));
    r.put("historial",d.list("select ac.id,ac.accion,ac.motivo,ac.fecha,u.nombre as usuario from auditoria_comercial ac join usuario u on u.id=ac.usuario_id where ac.entidad='OPERACION' and ac.registro_id=? order by ac.id desc",id));return r;
  }
  public List<Map<String,Object>> clients(Actor a,String q){
