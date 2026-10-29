@@ -314,7 +314,7 @@ void main() {
     expect(find.text('Dirección del servidor'), findsNothing);
     expect(find.textContaining('192.0.2.1'), findsNothing);
     expect(find.textContaining('http://'), findsNothing);
-    expect(find.text('ACCESO DE ASESOR'), findsOneWidget);
+    expect(find.text('ACCESO'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
   testWidgets('El error de acceso conserva el diseño y no revela el endpoint', (

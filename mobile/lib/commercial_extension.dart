@@ -991,10 +991,7 @@ extension _CommercialExtension on _CasaViewState {
   Widget catalogPage() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      infoNote(
-        'Los lotes vendidos se omiten. Las separaciones conservan las condiciones pactadas. Usa lote_id para identificar cada lote.',
-        compact: true,
-      ),
+      infoNote('Los lotes vendidos conservan sus datos.', compact: true),
       space(14),
       primary('Importar CSV, Excel o JSON', previewCatalog),
       space(8),
@@ -1108,7 +1105,7 @@ extension _CommercialExtension on _CasaViewState {
                 field('Ubicación', location, maxLength: 160),
                 space(10),
                 infoNote(
-                  'Esta edición publica un plan para este lote. Para publicar varios planes usa JSON con la propiedad planes.',
+                  'Este lote tendrá un único plan de pago.',
                   compact: true,
                 ),
               ],
@@ -1150,10 +1147,6 @@ extension _CommercialExtension on _CasaViewState {
   Widget notificationPage() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      infoNote(
-        'Avisos globales de separaciones, ventas y liberaciones. Se actualizan cada 15 segundos mientras mantienes la sesión abierta.',
-        compact: true,
-      ),
       space(10),
       Row(
         children: [

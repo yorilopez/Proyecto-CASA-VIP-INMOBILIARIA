@@ -759,7 +759,7 @@ class _CasaViewState extends State<CasaView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
-            height: 318,
+            height: 248,
             child: Stack(
               children: [
                 const Positioned.fill(child: ColoredBox(color: ink)),
@@ -779,30 +779,7 @@ class _CasaViewState extends State<CasaView> {
                     padding: const EdgeInsets.symmetric(horizontal: 28),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                      children: [
-                        tx(
-                          'PROTOTIPO COMERCIAL',
-                          size: 10.72,
-                          color: const Color(0xffd4a92f),
-                          weight: FontWeight.w800,
-                          spacing: 2.5,
-                        ),
-                        space(11),
-                        brand(),
-                        space(18),
-                        Container(width: 52, height: 2, color: gold),
-                        space(12),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 290),
-                          child: tx(
-                            'Información de lotes y separaciones, lista para atender al cliente.',
-                            size: 14.08,
-                            color: const Color(0xffc7c4bc),
-                            height: 1.5,
-                            align: TextAlign.center,
-                          ),
-                        ),
-                      ],
+                      children: [brand()],
                     ),
                   ),
                 ),
@@ -816,16 +793,10 @@ class _CasaViewState extends State<CasaView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  eyebrow('ACCESO DE ASESOR'),
+                  eyebrow('ACCESO'),
                   space(4),
                   tx('Bienvenido', size: 28, height: 1.5, spacing: -1.1),
                   space(7),
-                  tx(
-                    'Ingresa para consultar precios, clientes y disponibilidad.',
-                    size: 14.24,
-                    color: const Color(0xff716e66),
-                    height: 1.45,
-                  ),
                   space(23),
                   field(
                     'Correo corporativo',
@@ -844,7 +815,7 @@ class _CasaViewState extends State<CasaView> {
                     validate: (v) => v == null || v.isEmpty
                         ? 'Completa este campo.'
                         : utf8.encode(v).length > 72
-                        ? 'La contraseña supera 72 bytes UTF-8.'
+                        ? 'La contraseña excede el tamaño permitido.'
                         : null,
                     required: true,
                     obscure: true,
@@ -860,26 +831,6 @@ class _CasaViewState extends State<CasaView> {
                       }
                     }),
                     after: 'arrow-right',
-                  ),
-                  space(23),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ico(
-                        'shield-check',
-                        size: 18,
-                        color: const Color(0xffa77a0b),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: tx(
-                          'Acceso seguro para el equipo comercial',
-                          size: 12,
-                          color: const Color(0xff78746b),
-                          align: TextAlign.center,
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
@@ -1456,9 +1407,6 @@ class _CasaViewState extends State<CasaView> {
           space(12),
         ],
         if (rows.isEmpty) empty('No se encontraron proyectos.'),
-        infoNote(
-          'La disponibilidad se valida nuevamente antes de confirmar una separación.',
-        ),
       ],
     );
   }

@@ -16,7 +16,7 @@ try{
  await page.goto('http://127.0.0.1:18081',{waitUntil:'networkidle'});await page.waitForTimeout(900);const sem=page.locator('flt-semantics-placeholder');if(await sem.count())await sem.dispatchEvent('click');
  async function click(name){let el=page.getByRole('button',{name,exact:true});if(!await el.count())el=page.getByText(name,{exact:true});await el.last().click();await page.waitForTimeout(350);}
  async function shot(name){await page.waitForTimeout(300);await page.screenshot({path:out+'/'+name+'.png'});}
- async function enter(name,value){const el=page.getByRole('textbox',{name:new RegExp('^'+name)});await el.last().click();await page.keyboard.press('Control+A');await page.keyboard.type(value);}
+ async function enter(name,value){const el=page.getByRole('textbox',{name:new RegExp('^'+name)});await el.last().click();await page.waitForTimeout(150);await page.keyboard.press('Control+A');await page.keyboard.type(value,{delay:20});await page.waitForTimeout(120);}
  await enter('Correo corporativo','admin@casavip.pe');await enter('Contraseña','CasaVIP-demo-2026!');await click('Ingresar');await page.getByText('Precios',{exact:true}).waitFor();
  await click('Clientes');await click('Todos los clientes');await click('Clientes potenciales');await page.getByText('3 clientes',{exact:true}).waitFor();await shot('22_clientes_potenciales');
  await click('Operaciones');await page.getByRole('button',{name:'Filtrar operaciones',exact:true}).click();await page.getByText('Mostrar',{exact:true}).waitFor();await shot('23_filtros_operaciones');
