@@ -2050,7 +2050,7 @@ class _CasaViewState extends State<CasaView> {
                         ),
                         space(4),
                         tx(
-                          '${l['referencia'] ?? ''} · ${l['area_m2']} m²',
+                          '${l['etapa'] ?? ''} · ${l['referencia'] ?? ''} · ${l['area_m2']} m²',
                           size: 12.16,
                           color: muted,
                         ),

@@ -317,6 +317,8 @@ void main() {
     }
     expect(find.text('Ficha'), findsOneWidget);
     expect(find.text('Separar lote'), findsOneWidget);
+    await tapText(t, 'Ficha');
+    expect(find.textContaining('Etapa 1'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
   testWidgets(
