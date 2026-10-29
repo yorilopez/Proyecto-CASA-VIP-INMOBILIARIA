@@ -9,7 +9,7 @@ async function api(p){const r=await fetch('http://127.0.0.1:18081/api'+p,{header
 try{
  for(let i=0;i<100;i++){try{if((await fetch('http://127.0.0.1:18081/api/health')).ok)break;}catch{}await new Promise(r=>setTimeout(r,400));}
  const login=await fetch('http://127.0.0.1:18081/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'admin@casavip.pe',password:'CasaVIP-demo-2026!'})});token=(await login.json()).token;if(!token)throw Error('No se pudo iniciar el escenario mensual');
- const all=await api('/clients'),ops=await api('/reservations');if(all.length!==38||ops.length!==20)throw Error('No se cargaron los escenarios ampliados: '+all.length+'/'+ops.length);
+ let all=[],ops=[];for(let i=0;i<40;i++){all=await api('/clients');ops=await api('/reservations');if(all.length===38&&ops.length===20)break;await new Promise(r=>setTimeout(r,200));}if(all.length!==38||ops.length!==20)throw Error('No se cargaron los escenarios ampliados: '+all.length+'/'+ops.length);
  const old=await api('/reservations?month='+previous);if(old.length!==3)throw Error('El mes anterior debe tener separación venta y liberación');
  const potential=await api('/clients?month='+month+'&category=POTENCIAL');if(potential.length!==3)throw Error('Se esperaban tres clientes potenciales del proyecto demo');
  browser=await chromium.launch({headless:true});page=await browser.newPage({viewport:{width:430,height:900},deviceScaleFactor:1,acceptDownloads:true});page.on('pageerror',e=>errors.push(String(e)));
@@ -21,7 +21,7 @@ try{
  await click('Clientes');await click('Todos los clientes');await click('Clientes potenciales');await page.getByText('3 clientes',{exact:true}).waitFor();await shot('22_clientes_potenciales');
  await click('Operaciones');await page.getByRole('button',{name:'Filtrar operaciones',exact:true}).click();await page.getByText('Mostrar',{exact:true}).waitFor();await shot('23_filtros_operaciones');
  await click('Todas las operaciones');await click('Ventas');await click('Aplicar filtros');await page.getByText('2 ventas',{exact:true}).waitFor();await shot('24_ventas_mes_actual');
- await click('Mi cuenta').catch(async()=>{await page.getByRole('button',{name:/^Mi cuenta/}).click();});await page.getByRole('menuitem',{name:'Historiales comerciales',exact:true}).click();
+ await page.getByRole('button',{name:/^Mi cuenta/}).click();await page.getByRole('menuitem',{name:'Historiales comerciales',exact:true}).click();
  await click('Filtrar historial');await click('Todos los usuarios');await click('Andrea Demo');await click('Aplicar filtros');await shot('25_historial_usuario');
  const history=await api('/admin/history?month='+month+'&user=1');if(history.length===0)throw Error('El historial de Andrea debe contener registros demo');
  await page.getByRole('button',{name:/Ver cambio/}).first().click();await page.getByText('Anterior',{exact:true}).first().waitFor();await page.getByText('Nuevo',{exact:true}).first().waitFor();await shot('26_historial_comparacion');

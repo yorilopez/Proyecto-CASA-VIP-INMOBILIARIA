@@ -26,7 +26,7 @@ export async function verifyCommercialFlows({page,root,click,enter,capture,reser
   const lot=await api('/lots/'+reservation.lote_id),op=await api('/operations/'+reservation.id);if(Number(lot.precio)!==24000||Number(op.precio_acordado)!==21000||Number(op.inicial_acordada)!==3000||op.numero_cuotas_acordado!==24)throw Error('Catálogo y condiciones deben ser independientes');
   const soldLot=await api('/lots/5');if(Number(soldLot.precio)!==21000)throw Error('La importación cambió un lote vendido');
   await click('Operaciones');await page.getByRole('button',{name:/Cliente Demostración/}).first().click();await page.mouse.move(220,600);await page.mouse.wheel(0,1100);await page.waitForTimeout(300);await click('Registrar venta');
-  const price=page.getByRole('textbox',{name:/^Precio acordado/});await price.first().click();if(Number(await page.locator('input:focus').inputValue())!==21000)throw Error('La venta debe iniciar con el precio negociado');
+  const price=page.getByRole('textbox',{name:/^Precio acordado/});await price.first().click();await page.waitForFunction(()=>Number(document.querySelector('input:focus')?.value)===21000,{},{timeout:4000});
   await page.getByRole('checkbox').last().click();await click('Confirmar venta');await page.getByRole('button',{name:'Corregir información',exact:true}).waitFor();await page.waitForTimeout(400);
   const sale=await api('/operations/'+reservation.id);if(sale.estado!=='CONFIRMADA'||Number(sale.venta.precio_final)!==21000||Number(sale.venta.inicial)!==3000||sale.venta.numero_cuotas!==24)throw Error('Venta no conservó condiciones');await capture('20_venta');
   await page.mouse.move(220,600);await page.mouse.wheel(0,1000);await page.waitForTimeout(300);
