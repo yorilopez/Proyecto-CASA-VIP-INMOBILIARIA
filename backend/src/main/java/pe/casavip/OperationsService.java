@@ -26,7 +26,7 @@ public class OperationsService {
    var r=authorized(id,a,false);r.put("datos_acordados",d.decode(r.get("datos_acordados")));
    var sales=d.list("select * from venta where separacion_id=?",id);
    if(!sales.isEmpty()){var v=sales.getFirst();v.put("datos_finales",d.decode(v.get("datos_finales")));r.put("venta",v);}
-   var lot=commercial.lot(id(r,"lote_id"),false);r.put("lote_actual",lot);
+   var lot=commercial.lot(id(r,"lote_id"),false);r.put("lote_actual",lot);r.put("asesor_nombre",d.row("select nombre from usuario where id=?",r.get("asesor_id")).get("nombre"));
    if(a.manager())r.put("documentos",d.list("select id,persona,lado from operacion_documento where separacion_id=? and activo=true order by id",id));
    r.put("historial",d.list("select ac.id,ac.accion,ac.motivo,ac.fecha,u.nombre as usuario from auditoria_comercial ac join usuario u on u.id=ac.usuario_id where ac.entidad='OPERACION' and ac.registro_id=? order by ac.id desc",id));return r;
  }
@@ -54,9 +54,10 @@ public class OperationsService {
    if(id(person,"proyecto_id")!=id(lot,"proyecto_id"))throw new IllegalArgumentException("El cliente debe pertenecer al proyecto del lote.");
    Long co=in.quitar_cotitular()?null:in.cotitular_id()!=null?in.cotitular_id():prior.get("cotitular_id")==null?null:id(prior,"cotitular_id");
    if(co!=null){var cp=service.client(co,a);if(co==client||id(cp,"proyecto_id")!=id(lot,"proyecto_id"))throw new IllegalArgumentException("Revisa el cotitular y su proyecto.");}
-   long advisor=in.asesor_id()==null?id(prior,"asesor_id"):in.asesor_id();d.row("select id from usuario where id=? and activo=true and eliminado=false",advisor);
+   long advisor=in.asesor_id()==null?id(prior,"asesor_id"):in.asesor_id();
+   if(advisor!=id(prior,"asesor_id"))d.row("select id from usuario where id=? and activo=true and eliminado=false",advisor);
    d.execute("update separacion set cliente_id=?,cotitular_id=?,asesor_id=?,monto=?,observacion=? where id=?",client,co,advisor,in.monto(),in.observacion(),operation);
-   d.terms(operation,in.precio(),in.inicial(),in.numero_cuotas());d.capture(operation);var f=OperationsDao.financial(in.precio(),in.inicial(),in.numero_cuotas());
+   d.terms(operation,in.precio(),in.inicial(),in.numero_cuotas());d.capture(operation,in.actualizar_personas());var f=OperationsDao.financial(in.precio(),in.inicial(),in.numero_cuotas());
    if("CONFIRMADA".equals(prior.get("estado")))d.execute("update venta set precio_final=?,inicial=?,numero_cuotas=?,mensualidad=?,ultima_cuota=?,datos_finales=?,fecha_venta=coalesce(?,fecha_venta) where separacion_id=?",in.precio(),in.inicial(),in.numero_cuotas(),f.get("mensualidad"),f.get("ultima_cuota"),d.encode(d.snapshot(operation)),in.fecha(),operation);
    d.audit(a,"OPERACION",operation,"CORREGIR",in.motivo(),prior,commercial.reservation(operation,false));return detail(operation,a);
  }

@@ -508,13 +508,30 @@ extension _CommercialExtension on _CasaViewState {
           text:
               '${op['venta']?['fecha_venta'] ?? DateTime.now().toIso8601String().substring(0, 10)}',
         );
-    bool signed = false;
+    bool signed = false, refreshPeople = false;
     int? selectedClient = (op['cliente_id'] as num?)?.toInt(),
         selectedCo = (op['cotitular_id'] as num?)?.toInt(),
         selectedAdvisor = (op['asesor_id'] as num?)?.toInt();
     if (!sale) {
       c.users = cv.CasaController.rows(await c.api.call('GET', '/admin/users'));
     }
+    final people = [...c.clients];
+    final previous = operationSnapshot(op);
+    for (final key in ['titular', 'cotitular']) {
+      final record = previous[key];
+      if (record != null && !people.any((p) => p['id'] == record['id']))
+        people.add({
+          ...Data.from(record),
+          'proyecto_id': op['lote_actual']['proyecto_id'],
+        });
+    }
+    final advisors = [...c.users];
+    if (!advisors.any((u) => u['id'] == selectedAdvisor))
+      advisors.add({
+        'id': selectedAdvisor,
+        'nombre': op['asesor_nombre'] ?? 'Usuario histórico',
+        'activo': false,
+      });
     if (!mounted) return null;
     final key = GlobalKey<FormState>();
     return showDialog<Data>(
@@ -577,12 +594,12 @@ extension _CommercialExtension on _CasaViewState {
                       space(12),
                       DropdownButtonFormField<int>(
                         initialValue:
-                            c.clients.any((p) => p['id'] == selectedClient)
+                            people.any((p) => p['id'] == selectedClient)
                             ? selectedClient
                             : null,
                         decoration: const InputDecoration(labelText: 'Titular'),
                         items: [
-                          for (final p in c.clients.where(
+                          for (final p in people.where(
                             (p) =>
                                 p['proyecto_id'] ==
                                 op['lote_actual']['proyecto_id'],
@@ -600,8 +617,7 @@ extension _CommercialExtension on _CasaViewState {
                       ),
                       space(12),
                       DropdownButtonFormField<int>(
-                        initialValue:
-                            c.clients.any((p) => p['id'] == selectedCo)
+                        initialValue: people.any((p) => p['id'] == selectedCo)
                             ? selectedCo
                             : 0,
                         decoration: const InputDecoration(
@@ -612,7 +628,7 @@ extension _CommercialExtension on _CasaViewState {
                             value: 0,
                             child: Text('Sin cotitular'),
                           ),
-                          for (final p in c.clients.where(
+                          for (final p in people.where(
                             (p) =>
                                 p['proyecto_id'] ==
                                 op['lote_actual']['proyecto_id'],
@@ -631,15 +647,17 @@ extension _CommercialExtension on _CasaViewState {
                       space(12),
                       DropdownButtonFormField<int>(
                         initialValue:
-                            c.users.any((u) => u['id'] == selectedAdvisor)
+                            advisors.any((u) => u['id'] == selectedAdvisor)
                             ? selectedAdvisor
                             : null,
                         decoration: const InputDecoration(
                           labelText: 'Asesor asignado',
                         ),
                         items: [
-                          for (final u in c.users.where(
-                            (u) => u['activo'] == true,
+                          for (final u in advisors.where(
+                            (u) =>
+                                u['activo'] == true ||
+                                u['id'] == selectedAdvisor,
                           ))
                             DropdownMenuItem(
                               value: (u['id'] as num).toInt(),
@@ -653,6 +671,18 @@ extension _CommercialExtension on _CasaViewState {
                         onChanged: (v) => update(() => selectedAdvisor = v),
                       ),
                       space(12),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Actualizar datos y DNI desde las fichas actuales',
+                        ),
+                        subtitle: const Text(
+                          'Conserva el historial de los datos anteriores.',
+                        ),
+                        value: refreshPeople,
+                        onChanged: (v) =>
+                            update(() => refreshPeople = v ?? false),
+                      ),
                       field(
                         'Motivo de la corrección',
                         reasonInput,
@@ -722,6 +752,7 @@ extension _CommercialExtension on _CasaViewState {
                   'monto': m,
                   'observacion': obs.text,
                   'motivo': reasonInput.text,
+                  'actualizar_personas': refreshPeople,
                   'cliente_id': selectedClient,
                   'cotitular_id': selectedCo == 0 ? null : selectedCo,
                   'quitar_cotitular': selectedCo == 0,

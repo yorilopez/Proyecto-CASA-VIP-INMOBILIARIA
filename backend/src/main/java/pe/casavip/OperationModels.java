@@ -10,7 +10,7 @@ public final class OperationModels {
    @NotNull BigDecimal precio,@NotNull BigDecimal inicial,@Min(1) @Max(600) int numero_cuotas,
    @NotNull BigDecimal monto,@Size(max=500) String observacion,
    @NotBlank @Size(max=500) String motivo,Long cliente_id,Long cotitular_id,boolean quitar_cotitular,Long asesor_id,
-   @PastOrPresent LocalDate fecha){}
+   @PastOrPresent LocalDate fecha,boolean actualizar_personas){}
  public record UserInput(@NotBlank @Size(max=160) String nombre,@NotBlank @Email @Size(max=254) String correo,
    @NotBlank @Pattern(regexp="ASESOR|RESPONSABLE_COMERCIAL|ADMINISTRADOR") String rol,
    @Size(max=30) String telefono,@Size(max=64) String password,boolean activo){}

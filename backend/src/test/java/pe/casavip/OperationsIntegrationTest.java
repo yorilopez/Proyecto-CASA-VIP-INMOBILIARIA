@@ -140,4 +140,12 @@ class OperationsIntegrationTest {
    long version=jdbc.queryForObject("select version from separacion where id=?",Long.class,id);mvc.perform(put("/api/operations/"+id).header("Authorization",m).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("version",version,"precio",20000,"inicial",4000,"numero_cuotas",20,"monto",500,"motivo","Corrección comercial autorizada")))).andExpect(status().isOk());
    assertEquals(new BigDecimal("20000.00"),jdbc.queryForObject("select precio_final from venta where separacion_id=?",BigDecimal.class,id));assertTrue(jdbc.queryForObject("select anterior from auditoria_comercial where entidad='OPERACION' and registro_id=? and accion='CORREGIR'",String.class,id).contains("21000"));
  }
+ @Test void corregirNoReemplazaDatosHistoricosSinSolicitudExplicita()throws Exception{
+   long id=reserve(Map.of()).get("id").asLong();jdbc.update("update cliente set nombre='Nombre actual diferente',activo=false where id=?",client);jdbc.update("update usuario set activo=false where id=1");
+   var in=new HashMap<String,Object>(Map.of("version",jdbc.queryForObject("select version from separacion where id=?",Long.class,id),"precio",21000,"inicial",4000,"numero_cuotas",24,"monto",500,"motivo","Corrección de condiciones","asesor_id",1));
+   var corrected=body(mvc.perform(put("/api/operations/"+id).header("Authorization",m).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(in))).andExpect(status().isOk()));
+   assertEquals("Titular nuevo",corrected.get("datos_acordados").get("titular").get("nombre").asText());
+   in.put("version",corrected.get("version").asLong());in.put("actualizar_personas",true);
+   var refreshed=body(mvc.perform(put("/api/operations/"+id).header("Authorization",m).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(in))).andExpect(status().isOk()));assertEquals("Nombre actual diferente",refreshed.get("datos_acordados").get("titular").get("nombre").asText());
+ }
 }

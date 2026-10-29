@@ -49,7 +49,8 @@ public class OperationsDao {
     jdbc.update("update separacion set precio_acordado=?,inicial_acordada=?,numero_cuotas_acordado=?,cuota_acordada=?,version=version+1 where id=?",
       price,initial,count,f.get("mensualidad"),id);
   }
-  public Map<String,Object> snapshot(long id) {
+  public Map<String,Object> snapshot(long id) {return snapshot(id,false);}
+  private Map<String,Object> snapshot(long id,boolean refreshPeople) {
     var s=row("select * from separacion where id=?",id);
     var l=row("select l.id,l.codigo,l.area_m2,l.precio,l.ubicacion,m.codigo as manzana,e.nombre as etapa,p.nombre as proyecto from lote l join manzana m on m.id=l.manzana_id join etapa e on e.id=m.etapa_id join proyecto p on p.id=e.proyecto_id where l.id=?",s.get("lote_id"));
     var c=row("select id,nombre,tipo_documento,numero_documento,telefono,correo,direccion,ocupacion from cliente where id=?",s.get("cliente_id"));
@@ -58,10 +59,20 @@ public class OperationsDao {
     if(s.get("precio_acordado")!=null&&s.get("inicial_acordada")!=null&&s.get("numero_cuotas_acordado")!=null)
       result.put("condiciones",financial(money(s.get("precio_acordado")),money(s.get("inicial_acordada")),((Number)s.get("numero_cuotas_acordado")).intValue()));
     result.put("monto_separacion",s.get("monto"));result.put("observacion",Objects.toString(s.get("observacion"),""));
+    if(decode(s.get("datos_acordados")) instanceof Map<?,?> old){
+      for(String key:List.of("lote","titular","cotitular")){
+        if((!refreshPeople||key.equals("lote"))&&old.get(key) instanceof Map<?,?> prior&&result.get(key) instanceof Map<?,?> current&&Objects.toString(prior.get("id")).equals(Objects.toString(current.get("id"))))result.put(key,prior);
+      }
+    }
     return result;
   }
-  public void capture(long id) {
-    jdbc.update("update separacion set datos_acordados=? where id=?",encode(snapshot(id)),id);
+  public void capture(long id) {capture(id,false);}
+  public void capture(long id,boolean refreshPeople) {
+    var original=row("select datos_acordados from separacion where id=?",id);var next=snapshot(id,refreshPeople);
+    Object prior=decode(original.get("datos_acordados"));boolean samePeople=false;
+    if(prior instanceof Map<?,?> old){samePeople=Objects.equals(encode(old.get("titular")),encode(next.get("titular")))&&Objects.equals(encode(old.get("cotitular")),encode(next.get("cotitular")));}
+    jdbc.update("update separacion set datos_acordados=? where id=?",encode(next),id);
+    if(samePeople&&!refreshPeople&&jdbc.queryForObject("select count(*) from operacion_documento where separacion_id=?",Integer.class,id)>0)return;
     jdbc.update("update operacion_documento set activo=false where separacion_id=?",id);
     jdbc.update("update operacion_documento set activo=true where separacion_id=? and ruta_privada in (select cd.ruta_privada from cliente_documento cd join separacion s on s.id=? where cd.cliente_id=s.cliente_id or cd.cliente_id=s.cotitular_id)",id,id);
     jdbc.update("insert into operacion_documento(separacion_id,persona,lado,ruta_privada) select ?,c.nombre,d.lado,d.ruta_privada from cliente_documento d join cliente c on c.id=d.cliente_id join separacion s on s.id=? where (d.cliente_id=s.cliente_id or d.cliente_id=s.cotitular_id) and not exists(select 1 from operacion_documento od where od.separacion_id=? and od.ruta_privada=d.ruta_privada)",id,id,id);
