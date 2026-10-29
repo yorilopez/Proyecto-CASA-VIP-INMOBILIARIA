@@ -10,6 +10,7 @@ import 'api.dart';
 import 'controller.dart' as cv;
 import 'platform_io.dart' as files;
 import 'prototype_style.dart';
+import 'financial_terms.dart';
 
 part 'commercial_extension.dart';
 

@@ -1,34 +1,20 @@
 part of 'main.dart';
 
 extension _CommercialExtension on _CasaViewState {
-  num monthlyForInputs(String price, String initial, String count) {
-    final n = int.tryParse(count) ?? 0;
-    if (n < 1) return 0;
-    return (((num.tryParse(price.replaceAll(',', '.')) ?? 0) -
-                    (num.tryParse(initial.replaceAll(',', '.')) ?? 0)) *
-                100 /
-                n)
-            .floor() /
-        100;
-  }
-
-  num get draftMonthly {
-    final price = c.agreedPrice ?? num.tryParse('${c.lot?['precio']}') ?? 0;
-    final initial = c.agreedInitial ?? num.tryParse('${plan['inicial']}') ?? 0;
-    final count =
-        c.agreedCount ?? (plan['numero_cuotas'] as num?)?.toInt() ?? 1;
-    return count > 0 ? ((price - initial) * 100 / count).floor() / 100 : 0;
-  }
-
+  num monthlyForInputs(String price, String initial, String count) =>
+      FinancialTerms.parse(price, initial, count)?.monthly ?? 0;
+  num get draftMonthly => monthlyForInputs(
+    '${c.agreedPrice ?? plan['precio'] ?? c.lot?['precio'] ?? 0}',
+    '${c.agreedInitial ?? plan['inicial'] ?? 0}',
+    '${c.agreedCount ?? plan['numero_cuotas'] ?? 1}',
+  );
   bool validDraftTerms() =>
-      c.agreedPrice != null &&
-      c.agreedInitial != null &&
-      c.agreedCount != null &&
-      c.agreedPrice! > 0 &&
-      c.agreedInitial! > 0 &&
-      c.agreedInitial! <= c.agreedPrice! &&
-      c.agreedCount! > 0 &&
-      c.agreedCount! <= 600;
+      FinancialTerms.parse(
+        negotiatedPrice.text,
+        negotiatedInitial.text,
+        negotiatedCount.text,
+      ) !=
+      null;
   void ensureDraftTerms() {
     if (draftLot != c.lot?['id'] || c.agreedPrice == null) {
       draftLot = (c.lot?['id'] as num?)?.toInt();
@@ -705,7 +691,13 @@ extension _CommercialExtension on _CasaViewState {
                     i = num.tryParse(initial.text.replaceAll(',', '.')),
                     n = int.tryParse(count.text),
                     m = num.tryParse(deposit.text.replaceAll(',', '.'));
-                if (p == null ||
+                if (FinancialTerms.parse(
+                          price.text,
+                          initial.text,
+                          count.text,
+                        ) ==
+                        null ||
+                    p == null ||
                     i == null ||
                     n == null ||
                     m == null ||

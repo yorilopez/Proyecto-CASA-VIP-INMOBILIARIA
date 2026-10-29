@@ -79,6 +79,7 @@ public class CatalogService {
    }return clean;
  }
  private Map<String,Object> plan(BigDecimal price,Object initial,Object count){var f=OperationsDao.financial(price,OperationsDao.money(initial),Math.toIntExact(number(count)));if(((BigDecimal)f.get("mensualidad")).signum()<=0)throw new IllegalArgumentException("El plan del catálogo debe tener saldo y mensualidad positivos.");return f;}
+ @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
  public Map<String,Object> preview(MultipartFile file,Actor a)throws IOException {BusinessRules.requireAdmin(a.role());try{return Map.of("rows",normalize(parse(file),false));}catch(org.springframework.dao.DataAccessException e){throw e;}catch(IllegalArgumentException e){throw e;}catch(Exception e){throw new IllegalArgumentException("No se pudo leer el archivo. Revisa la plantilla y sus valores.");}}
  @Transactional public Map<String,Object> apply(List<Map<String,Object>> rows,String reason,Actor a){
    BusinessRules.requireAdmin(a.role());reason=BusinessRules.text(reason,500);var normalized=normalize(rows,true);int applied=0,skipped=0;
