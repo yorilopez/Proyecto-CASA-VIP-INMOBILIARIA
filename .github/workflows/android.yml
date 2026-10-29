@@ -45,3 +45,43 @@ jobs:
           path: mobile/build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 30
           if-no-files-found: error
+
+  web-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: mobile
+      - run: flutter build web --release --no-web-resources-cdn
+        working-directory: mobile
+      - run: |
+          mkdir -p backend/src/main/resources/static
+          cp -a mobile/build/web/. backend/src/main/resources/static/
+          mvn -B -f backend/pom.xml -DskipTests package
+      - name: Instalar navegador de pruebas
+        run: |
+          npm install --prefix "$RUNNER_TEMP/casavip-ui" playwright@1.62.1
+          npx --prefix "$RUNNER_TEMP/casavip-ui" playwright install --with-deps chromium
+      - name: Recorrido real de las 14 pantallas
+        env:
+          CASA_VIP_UI_TOOLS: ${{ runner.temp }}/casavip-ui
+        run: node scripts/visual_e2e.mjs
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: CASA-VIP-Web-Evidencias
+          path: evidence/revision_0_3_1
+          retention-days: 30
+          if-no-files-found: error
