@@ -22,19 +22,21 @@ Cuentas ficticias de demostración, contraseña común `CasaVIP-demo-2026!`:
 | Responsable comercial | responsable@casavip.pe |
 | Administrador | admin@casavip.pe |
 
-La base H2 se conserva en `data/` y las imágenes privadas en `private-files/`, dentro de la carpeta del aplicativo. El perfil demo amplía de manera idempotente el catálogo y conserva los registros existentes. Se aconseja respaldar ambas carpetas antes de sustituir una versión anterior.
+La base H2 se conserva en `data/` y las imágenes privadas en `private-files/`, dentro de la carpeta del aplicativo. El perfil demo amplía de manera idempotente el catálogo y conserva los registros existentes. Para conservar una instalación anterior: detener el servidor, respaldar `data/` y `private-files/`, y copiar esas dos carpetas dentro de la nueva carpeta del aplicativo antes de iniciarlo. La revisión actualiza el esquema H2 al arrancar.
 
 ## Ejecución desde un celular
 
 La web usa la API del mismo origen. Para una prueba en la misma red, el iniciador `INICIAR_CASA_VIP_RED_LOCAL.cmd` escucha en las interfaces del equipo. Abrir desde el navegador del teléfono `http://IP_DEL_EQUIPO:8080`. El teléfono y el equipo deben poder comunicarse y el firewall debe permitir el puerto. La IP se utiliza en la dirección del navegador, no en un campo del login.
 
-El APK adjunto es una compilación debug para Android arm64. Sin configuración adicional apunta al emulador (`http://10.0.2.2:8080`). Para un teléfono físico se debe compilar con una API accesible:
+El APK se descarga desde el artefacto Android de GitHub Actions indicado en `DESCARGAR_APK.url`. Es una compilación debug para Android arm64. Sin configuración adicional apunta al emulador (`http://10.0.2.2:8080`). Para un teléfono físico se debe compilar con una API accesible:
 
 ```powershell
 flutter build apk --debug --target-platform android-arm64 --dart-define=API_URL=http://IP_DEL_EQUIPO:8080
 ```
 
 También puede definirse la variable de repositorio `CASA_VIP_API_URL` para GitHub Actions. Esta configuración pertenece al entorno técnico. Los endpoint de una aplicación pueden inspeccionarse en el binario o el tráfico; retirarlos de la pantalla evita exponerlos en la interfaz, pero no los convierte en secretos de autenticación.
+
+Las compilaciones de depuración pueden usar firmas diferentes entre ejecuciones. Si Android informa un conflicto de firma, desinstalar el APK de demostración anterior antes de instalar el nuevo; la base del servidor se conserva.
 
 ## Construir desde fuentes
 
@@ -62,6 +64,8 @@ Se ejecutaron 35 casos Java con H2 y los mismos 35 con PostgreSQL 17.6, además 
 
 La compilación Android y las comprobaciones de navegador se documentan en la entrega. La cámara y el envío a una instalación real de WhatsApp requieren validación en un teléfono físico; una compilación y una prueba web no sustituyen esa validación.
 
-Los documentos académicos de la entrega anterior corresponden a 0.3.0. Las capturas nuevas y las notas de revisión acompañan esta versión; no se modificó el prototipo original.
+El informe acumulativo, la matriz y la presentación se actualizaron para 0.3.1. La matriz clasifica 30 de 33 requisitos completos (90,9 % por conteo sin ponderación); RF-12, RF-27 y RF-32 permanecen parciales. El prototipo y los archivos originales del avance 2 se conservaron.
 
 Estudiante: Lopez Huaman, Yori Yasser — U21231292. Trabajo elaborado con asistencia de IA y sujeto a revisión y sustentación del estudiante.
+
+La última comprobación integrada aprobó en [GitHub Actions](https://github.com/yorilopez/Proyecto-CASA-VIP-INMOBILIARIA/actions/runs/40899104478). El [APK](https://github.com/yorilopez/Proyecto-CASA-VIP-INMOBILIARIA/actions/runs/40899104478/artifacts/12907684576) y las [capturas vigentes](https://github.com/yorilopez/Proyecto-CASA-VIP-INMOBILIARIA/actions/runs/40899104478/artifacts/12908263137) se descargan por separado; requieren acceso al repositorio privado y tienen retención de 30 días. La procedencia de las capturas locales se detalla en `evidence/revision_0_3_1/LEEME_REVISION.md`.
