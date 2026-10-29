@@ -86,10 +86,25 @@ Widget brand({bool compact = false}) => Container(
     color: Colors.white,
     borderRadius: BorderRadius.circular(compact ? 7 : 14),
   ),
-  child: Image.asset(
-    'assets/casa-vip-logo.png',
+  child: FittedBox(
     fit: BoxFit.contain,
-    semanticLabel: 'CASA VIP Inmobiliaria',
+    child: ClipRect(
+      child: SizedBox(
+        width: 1320,
+        height: 790,
+        child: OverflowBox(
+          maxWidth: 1600,
+          maxHeight: 1600,
+          child: Image.asset(
+            'assets/casa-vip-logo.png',
+            width: 1600,
+            height: 1600,
+            fit: BoxFit.contain,
+            semanticLabel: 'CASA VIP Inmobiliaria',
+          ),
+        ),
+      ),
+    ),
   ),
 );
 Widget eyebrow(String t, {bool golden = false}) => tx(

@@ -147,10 +147,22 @@ class Fixture {
           request.method == 'GET') {
         data = clientRows.firstWhere((c) => path.endsWith('/${c['id']}'));
       } else if (path.endsWith('/clients')) {
-        final category=request.url.queryParameters['category'];
-        data = clientRows.where((person){
-          final linked=operationRows.where((op)=>op['cliente_id']==person['id']||op['cotitular_id']==person['id']);
-          return category=='VENTA'?linked.any((r)=>r['estado']=='CONFIRMADA'):category=='SEPARACION'?linked.any((r)=>r['estado']=='ACTIVA'):category=='POTENCIAL'?!linked.any((r)=>['ACTIVA','CONFIRMADA'].contains(r['estado'])):true;
+        final category = request.url.queryParameters['category'];
+        data = clientRows.where((person) {
+          final linked = operationRows.where(
+            (op) =>
+                op['cliente_id'] == person['id'] ||
+                op['cotitular_id'] == person['id'],
+          );
+          return category == 'VENTA'
+              ? linked.any((r) => r['estado'] == 'CONFIRMADA')
+              : category == 'SEPARACION'
+              ? linked.any((r) => r['estado'] == 'ACTIVA')
+              : category == 'POTENCIAL'
+              ? !linked.any(
+                  (r) => ['ACTIVA', 'CONFIRMADA'].contains(r['estado']),
+                )
+              : true;
         }).toList();
       } else if (path.endsWith('/reservations') && request.method == 'POST') {
         reservations++;
@@ -588,12 +600,14 @@ void main() {
     await t.pumpWidget(CasaVipApp(api: f.api));
     await login(t);
     await tapText(t, 'Clientes');
-    await t.tap(find.byType(DropdownButtonFormField<String>).first);await t.pumpAndSettle();
-    await tapText(t, 'Con venta',last:true);
+    await t.tap(find.byType(DropdownButtonFormField<String>).first);
+    await t.pumpAndSettle();
+    await tapText(t, 'Con venta', last: true);
     expect(find.text('Cliente vendido'), findsOneWidget);
     expect(find.text('Cliente reservado'), findsNothing);
-    await t.tap(find.byType(DropdownButtonFormField<String>).first);await t.pumpAndSettle();
-    await tapText(t, 'Con separación',last:true);
+    await t.tap(find.byType(DropdownButtonFormField<String>).first);
+    await t.pumpAndSettle();
+    await tapText(t, 'Con separación', last: true);
     expect(find.text('Cliente reservado'), findsOneWidget);
     expect(find.text('Cliente vendido'), findsNothing);
     expect(find.text('Operaciones'), findsOneWidget);

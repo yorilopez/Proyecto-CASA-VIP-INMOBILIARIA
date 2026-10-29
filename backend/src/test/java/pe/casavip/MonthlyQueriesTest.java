@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.time.*;
 import java.util.*;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,6 +21,35 @@ class MonthlyQueriesTest {
   @Autowired JdbcTemplate jdbc;
   @Autowired OperationsDao d;
   Actor admin = new Actor(3, "Admin", "ADMINISTRADOR"), advisor = new Actor(1, "Asesor", "ASESOR");
+
+  @BeforeEach
+  void fixture() {
+    for (String table :
+        List.of(
+            "notificacion_lectura",
+            "notificacion",
+            "auditoria_comercial",
+            "operacion_documento",
+            "cliente_documento",
+            "historial_lote",
+            "venta",
+            "separacion",
+            "cliente_relacion",
+            "cliente")) jdbc.update("delete from " + table);
+    jdbc.update(
+        "insert into cliente(id,tipo_documento,numero_documento,nombre,proyecto_id,asesor_id)"
+            + " values(1,'DNI','88050001','Cliente mensual uno',1,1),(2,'DNI','88050002','Cliente"
+            + " mensual dos',1,1)");
+    jdbc.update("update lote set estado='RESERVADO' where id=4");
+    jdbc.update("update lote set estado='VENDIDO' where id=5");
+    jdbc.update(
+        "insert into separacion(id,lote_id,cliente_id,asesor_id,monto,estado)"
+            + " values(1,4,1,1,500,'ACTIVA'),(2,5,2,1,500,'CONFIRMADA')");
+    jdbc.update(
+        "insert into"
+            + " venta(separacion_id,responsable_id,precio_final,inicial,contrato_firmado,fecha_venta)"
+            + " values(2,2,21000,3000,true,CURRENT_DATE)");
+  }
 
   @Test
   void limitaElMesEnZonaLima() {

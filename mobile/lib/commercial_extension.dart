@@ -65,7 +65,8 @@ extension _CommercialExtension on _CasaViewState {
       space(10),
     ],
   );
-  bool hasSale(Data client) => clientOperations(client).any((r)=>r['estado']=='CONFIRMADA');
+  bool hasSale(Data client) =>
+      clientOperations(client).any((r) => r['estado'] == 'CONFIRMADA');
   void loadPersonForm(Data profile) {
     names.text = '${profile['nombre'] ?? ''}';
     document.text = '${profile['numero_documento'] ?? ''}';

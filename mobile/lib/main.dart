@@ -3312,8 +3312,17 @@ class _CasaViewState extends State<CasaView> {
     );
   }
 
-  bool hasReservation(Data client) => clientOperations(client).any((r)=>r['estado']=='ACTIVA');
-  List<Data> clientOperations(Data client) => client['operaciones'] is List ? cv.CasaController.rows(client['operaciones']) : c.reservations.where((r)=>r['cliente_id']==client['id']||r['cotitular_id']==client['id']).toList();
+  bool hasReservation(Data client) =>
+      clientOperations(client).any((r) => r['estado'] == 'ACTIVA');
+  List<Data> clientOperations(Data client) => client['operaciones'] is List
+      ? cv.CasaController.rows(client['operaciones'])
+      : c.reservations
+            .where(
+              (r) =>
+                  r['cliente_id'] == client['id'] ||
+                  r['cotitular_id'] == client['id'],
+            )
+            .toList();
   Widget clients() {
     final q = search.text.trim().toLowerCase();
     final assigned = c.listedClients
@@ -3430,9 +3439,20 @@ class _CasaViewState extends State<CasaView> {
               .contains(q),
         )
         .toList();
-    final saleOnly=c.operationState=='CONFIRMADA';
-    final total=(saleOnly?all:active).fold<num>(0,(a,b)=>a+(num.tryParse('${saleOnly?b['precio_final']:b['monto']}')??0));
-    final summary='${all.length} ${switch(c.operationState){'ACTIVA'=>'separaciones','CONFIRMADA'=>'ventas','LIBERADA'=>'liberadas',_=>'operaciones'}}';
+    final saleOnly = c.operationState == 'CONFIRMADA';
+    final total = (saleOnly ? all : active).fold<num>(
+      0,
+      (a, b) =>
+          a +
+          (num.tryParse('${saleOnly ? b['precio_final'] : b['monto']}') ?? 0),
+    );
+    final summary =
+        '${all.length} ${switch (c.operationState) {
+          'ACTIVA' => 'separaciones',
+          'CONFIRMADA' => 'ventas',
+          'LIBERADA' => 'liberadas',
+          _ => 'operaciones',
+        }}';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -3456,11 +3476,7 @@ class _CasaViewState extends State<CasaView> {
                       golden: true,
                     ),
                     space(5),
-                    tx(
-                      summary,
-                      size: 16,
-                      color: Colors.white,
-                    ),
+                    tx(summary, size: 16, color: Colors.white),
                   ],
                 ),
               ),
@@ -3568,7 +3584,17 @@ class _CasaViewState extends State<CasaView> {
                             ),
                             space(2),
                             tx(
-                              displayDate(rows[i]['estado']=='CONFIRMADA'?rows[i]['fecha_venta']:['ANULADA','VENCIDA'].contains(rows[i]['estado'])?rows[i]['fecha_liberacion']??rows[i]['fecha_registro']:rows[i]['fecha_registro']),
+                              displayDate(
+                                rows[i]['estado'] == 'CONFIRMADA'
+                                    ? rows[i]['fecha_venta']
+                                    : [
+                                        'ANULADA',
+                                        'VENCIDA',
+                                      ].contains(rows[i]['estado'])
+                                    ? rows[i]['fecha_liberacion'] ??
+                                          rows[i]['fecha_registro']
+                                    : rows[i]['fecha_registro'],
+                              ),
                               size: 10.88,
                               weight: FontWeight.w700,
                             ),
