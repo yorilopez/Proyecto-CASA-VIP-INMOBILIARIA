@@ -5,10 +5,14 @@ on:
     paths:
       - 'mobile/**'
       - '.github/workflows/android.yml'
+      - 'scripts/**'
+      - 'backend/**'
   pull_request:
     paths:
       - 'mobile/**'
       - '.github/workflows/android.yml'
+      - 'scripts/**'
+      - 'backend/**'
   workflow_dispatch:
 permissions:
   contents: read
@@ -85,3 +89,4 @@ jobs:
           path: evidence/revision_0_3_1
           retention-days: 30
           if-no-files-found: error
+
