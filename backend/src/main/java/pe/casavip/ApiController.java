@@ -34,7 +34,7 @@ public class ApiController {
 
   @GetMapping("/health")
   public Object health() {
-    return Map.of("status", "UP", "version", "0.3.0");
+    return Map.of("status", "UP", "version", "0.3.1");
   }
 
   @PostMapping("/auth/login")
@@ -94,6 +94,19 @@ public class ApiController {
       @PathVariable long id, @Valid @RequestBody ChangeState in, @AuthenticationPrincipal Actor a) {
     service.state(id, in, a);
     return Map.of("ok", true);
+  }
+
+  @PutMapping("/clients/{id}")
+  public Object updateClient(
+      @PathVariable long id,
+      @Valid @RequestBody Client input,
+      @AuthenticationPrincipal Actor actor) {
+    return service.updateClient(id, input, actor);
+  }
+
+  @GetMapping("/clients/{id}")
+  public Object clientProfile(@PathVariable long id, @AuthenticationPrincipal Actor actor) {
+    return service.clientProfile(id, actor);
   }
 
   @GetMapping("/clients")

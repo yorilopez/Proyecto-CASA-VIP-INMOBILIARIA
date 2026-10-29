@@ -47,7 +47,26 @@ Future<PickedImage?> pickImage() {
   return result.future;
 }
 
+Future<void> shareWhatsApp(Uint8List bytes, String name, String mime) =>
+    shareFile(bytes, name, mime);
+
 Future<void> shareFile(Uint8List bytes, String name, String mime) async {
+  try {
+    final file = web.File(
+      [bytes.toJS].toJS,
+      name,
+      web.FilePropertyBag(type: mime),
+    );
+    final data = web.ShareData(files: [file].toJS, title: "CASA VIP");
+    if (web.window.isSecureContext && web.window.navigator.canShare(data)) {
+      try {
+        await web.window.navigator.share(data).toDart;
+        return;
+      } catch (e) {
+        if (e.toString().contains("AbortError")) return;
+      }
+    }
+  } catch (_) {}
   final blob = web.Blob([bytes.toJS].toJS, web.BlobPropertyBag(type: mime));
   final url = web.URL.createObjectURL(blob);
   final link = web.HTMLAnchorElement()

@@ -50,7 +50,10 @@ public class AuthService {
 
   private Actor actor(Map<String, Object> row) {
     return new Actor(
-        CommercialService.id(row, "id"), (String) row.get("nombre"), (String) row.get("rol"));
+        CommercialService.id(row, "id"),
+        (String) row.get("nombre"),
+        (String) row.get("rol"),
+        (String) row.get("telefono"));
   }
 
   public Actor resolve(String token) {

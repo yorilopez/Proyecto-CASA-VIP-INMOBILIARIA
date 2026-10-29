@@ -16,6 +16,8 @@ Base local: http://127.0.0.1:8080/api. JSON UTF-8. La sesión se envía como Aut
 | GET /lots/{id}/history | Historial de estados | Autenticado |
 | PATCH /lots/{id}/state | Disponible / No disponible con motivo | Administrador |
 | GET /clients?q= | Clientes visibles por el usuario | Autenticado |
+| GET /clients/{id} | Perfil y cotitular autorizado | Usuario autorizado sobre el cliente |
+| PUT /clients/{id} | Corregir datos personales autorizados | Usuario autorizado sobre el cliente |
 | POST /clients | Registrar o recuperar un cliente autorizado | Autenticado |
 | GET /clients/{id}/documents | Metadatos de imágenes del documento | Usuario autorizado sobre el cliente |
 | POST /clients/{id}/documents/{side} | Cargar ANVERSO o REVERSO | Usuario autorizado sobre el cliente |
@@ -30,9 +32,9 @@ Base local: http://127.0.0.1:8080/api. JSON UTF-8. La sesión se envía como Aut
 
 ## Solicitudes principales
 
-Cliente: nombre, tipo_documento (DNI o CE), numero_documento, telefono, correo, proyecto_id.
+Cliente: nombre, tipo_documento (DNI o CE), numero_documento, telefono, correo, proyecto_id; direccion y ocupacion opcionales. El objeto cotitular opcional contiene los datos de la segunda persona y crea una relación COTITULAR. El servicio impide vincular clientes de otro asesor.
 
-Separación: lote_id, cliente_id, monto (mayor que cero), observacion opcional. El servidor obtiene el asesor de la sesión y genera la fecha e historial.
+Separación: lote_id, cliente_id, monto (mayor que cero), observacion, plan_id y cotitular_id opcionales. El plan debe pertenecer al lote; precio, inicial, cuota y plazo se congelan desde el catálogo del servidor. Un cotitular debe estar vinculado y autorizado; requiere ambas caras del DNI del titular y del cotitular. El servidor obtiene el asesor de la sesión y genera la fecha e historial.
 
 Liberación y cambio administrativo: estado y motivo. El servicio ignora el estado para liberar y aplica la transición autorizada. No permite usar el cambio administrativo para saltar una reserva o una venta.
 

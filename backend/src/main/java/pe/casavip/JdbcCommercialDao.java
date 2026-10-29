@@ -42,15 +42,16 @@ public class JdbcCommercialDao implements CommercialDao {
 
   public Map<String, Object> user(String email) {
     return optional(
-        "select u.id,u.correo,u.nombre,u.password_hash,r.nombre as rol from usuario u join rol r on"
-            + " r.id=u.rol_id where lower(u.correo)=lower(?) and u.activo=true",
+        "select u.id,u.correo,u.nombre,u.telefono,u.password_hash,r.nombre as rol from usuario u"
+            + " join rol r on r.id=u.rol_id where lower(u.correo)=lower(?) and u.activo=true",
         email);
   }
 
   public Map<String, Object> session(String hash) {
     return optional(
-        "select u.id,u.nombre,r.nombre as rol from sesion s join usuario u on u.id=s.usuario_id"
-            + " join rol r on r.id=u.rol_id where s.token_hash=? and s.expira>? and u.activo=true",
+        "select u.id,u.nombre,u.telefono,r.nombre as rol from sesion s join usuario u on"
+            + " u.id=s.usuario_id join rol r on r.id=u.rol_id where s.token_hash=? and s.expira>?"
+            + " and u.activo=true",
         hash,
         Timestamp.from(java.time.Instant.now()));
   }
@@ -70,7 +71,13 @@ public class JdbcCommercialDao implements CommercialDao {
 
   public List<Map<String, Object>> projects() {
     return jdbc.queryForList(
-        "select id,codigo,nombre,ubicacion from proyecto where activo=true order by id");
+        "select p.id,p.codigo,p.nombre,p.ubicacion,(select count(*) from manzana m join etapa e on"
+            + " e.id=m.etapa_id where e.proyecto_id=p.id) as manzanas,(select count(*) from lote l"
+            + " join manzana m on m.id=l.manzana_id join etapa e on e.id=m.etapa_id where"
+            + " e.proyecto_id=p.id) as lotes,(select count(*) from lote l join manzana m on"
+            + " m.id=l.manzana_id join etapa e on e.id=m.etapa_id where e.proyecto_id=p.id and"
+            + " l.estado='DISPONIBLE') as disponibles from proyecto p where p.activo=true order by"
+            + " p.id");
   }
 
   public List<Map<String, Object>> stages(long id) {
@@ -88,8 +95,9 @@ public class JdbcCommercialDao implements CommercialDao {
   }
 
   private static final String LOT_SQL =
-      "select l.id,l.manzana_id,l.codigo,l.area_m2,l.precio,l.estado,m.codigo as manzana,e.nombre"
-          + " as etapa,e.proyecto_id,p.nombre as proyecto,p.ubicacion,(select min(pp.inicial) from"
+      "select l.id,l.manzana_id,l.codigo,l.area_m2,l.precio,l.estado,l.ubicacion as"
+          + " referencia,m.codigo as manzana,e.id as etapa_id,e.nombre as"
+          + " etapa,e.proyecto_id,p.nombre as proyecto,p.ubicacion,(select min(pp.inicial) from"
           + " lote_plan_pago lp join plan_pago pp on pp.id=lp.plan_pago_id where lp.lote_id=l.id"
           + " and pp.activo=true) as inicial,(select min(pp.numero_cuotas) from lote_plan_pago lp"
           + " join plan_pago pp on pp.id=lp.plan_pago_id where lp.lote_id=l.id and pp.activo=true)"
@@ -143,23 +151,26 @@ public class JdbcCommercialDao implements CommercialDao {
 
   public List<Map<String, Object>> clients(Actor actor, String q) {
     String sql =
-        "select id,tipo_documento,numero_documento,nombre,telefono,correo,proyecto_id,asesor_id"
+        "select"
+            + " id,tipo_documento,numero_documento,nombre,telefono,correo,direccion,ocupacion,proyecto_id,asesor_id"
             + " from cliente where (?=true or asesor_id=?) and (lower(nombre) like ? or"
-            + " numero_documento like ?) order by id desc";
+            + " numero_documento like ? or telefono like ?) order by id desc";
     String term = "%" + (q == null ? "" : q.toLowerCase(Locale.ROOT)) + "%";
-    return jdbc.queryForList(sql, actor.manager(), actor.id(), term, term);
+    return jdbc.queryForList(sql, actor.manager(), actor.id(), term, term, term);
   }
 
   public Map<String, Object> client(long id) {
     return one(
-        "select id,tipo_documento,numero_documento,nombre,telefono,correo,proyecto_id,asesor_id"
+        "select"
+            + " id,tipo_documento,numero_documento,nombre,telefono,correo,direccion,ocupacion,proyecto_id,asesor_id"
             + " from cliente where id=?",
         id);
   }
 
   public Map<String, Object> clientByDocument(String type, String number) {
     return optional(
-        "select id,tipo_documento,numero_documento,nombre,telefono,correo,proyecto_id,asesor_id"
+        "select"
+            + " id,tipo_documento,numero_documento,nombre,telefono,correo,direccion,ocupacion,proyecto_id,asesor_id"
             + " from cliente where tipo_documento=? and numero_documento=?",
         type,
         number);
@@ -182,7 +193,7 @@ public class JdbcCommercialDao implements CommercialDao {
   public List<Map<String, Object>> reservations(Actor a) {
     return jdbc.queryForList(
         "select"
-            + " s.id,s.lote_id,s.cliente_id,s.asesor_id,s.monto,s.fecha_registro,s.estado,s.observacion,c.nombre"
+            + " s.id,s.lote_id,s.cliente_id,s.asesor_id,s.monto,s.fecha_registro,s.estado,s.observacion,s.plan_pago_id,s.cotitular_id,s.precio_acordado,s.inicial_acordada,s.cuota_acordada,s.numero_cuotas_acordado,c.nombre"
             + " as cliente,m.codigo as manzana,l.codigo as lote,p.nombre as proyecto from"
             + " separacion s join cliente c on c.id=s.cliente_id join lote l on l.id=s.lote_id join"
             + " manzana m on m.id=l.manzana_id join etapa e on e.id=m.etapa_id join proyecto p on"
