@@ -79,7 +79,7 @@ jobs:
         with:
           name: CASA-VIP-Servidor-Web
           path: |
-            backend/target/casa-vip-backend-0.4.0.jar
+            backend/target/casa-vip-backend-0.5.0.jar
             backend/target/reports/apidocs
             backend/target/surefire-reports
           retention-days: 30
@@ -92,11 +92,16 @@ jobs:
         env:
           CASA_VIP_UI_TOOLS: ${{ runner.temp }}/casavip-ui
         run: node scripts/visual_e2e.mjs
+      - name: Filtros mensuales e historial visual
+        if: ${{ !cancelled() && hashFiles('backend/target/*.jar') != '' }}
+        env:
+          CASA_VIP_UI_TOOLS: ${{ runner.temp }}/casavip-ui
+        run: node scripts/monthly_e2e.mjs
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: CASA-VIP-Web-Evidencias
-          path: evidence/revision_0_4_0
+          path: evidence/revision_0_5_0
           retention-days: 30
           if-no-files-found: error
 

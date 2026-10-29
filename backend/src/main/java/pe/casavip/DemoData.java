@@ -8,6 +8,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
 /** Datos ficticios cargados exclusivamente en perfiles demo y test. */
+@org.springframework.core.annotation.Order(0)
 @Component
 @Profile({"demo", "test"})
 public class DemoData implements CommandLineRunner {

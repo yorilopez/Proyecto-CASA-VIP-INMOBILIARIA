@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'api.dart';
+import 'listing_filter.dart';
 
 typedef Row = Map<String, dynamic>;
 
@@ -12,6 +13,65 @@ class CasaController extends ChangeNotifier {
   Row? operation;
   List<Row> notifications = [], users = [], catalog = [], history = [];
   int unread = 0;
+  String clientMonth = businessMonth(),
+      operationMonth = businessMonth(),
+      historyMonth = businessMonth();
+  String clientCategory = '', operationState = '', historyEntity = '';
+  int? historyUser;
+  List<Row> listedClients = [], listedOperations = [], historyUsers = [];
+  int _clientLoad = 0, _operationLoad = 0, _historyLoad = 0;
+  Future<void> loadClients() async {
+    final serial = ++_clientLoad;
+    final value = rows(
+      await api.call(
+        'GET',
+        listingUrl('/clients', {
+          'month': clientMonth,
+          'category': clientCategory,
+        }),
+      ),
+    );
+    if (serial == _clientLoad) {
+      listedClients = value;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadOperations() async {
+    final serial = ++_operationLoad;
+    final value = rows(
+      await api.call(
+        'GET',
+        listingUrl('/reservations', {
+          'month': operationMonth,
+          'state': operationState,
+        }),
+      ),
+    );
+    if (serial == _operationLoad) {
+      listedOperations = value;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadHistory() async {
+    final serial = ++_historyLoad;
+    final value = rows(
+      await api.call(
+        'GET',
+        listingUrl('/admin/history', {
+          'month': historyMonth,
+          'entity': historyEntity,
+          'user': historyUser?.toString() ?? '',
+        }),
+      ),
+    );
+    if (serial == _historyLoad) {
+      history = value;
+      notifyListeners();
+    }
+  }
+
   num? agreedPrice, agreedInitial;
   int? agreedCount;
   CasaController(this.api);
@@ -53,9 +113,15 @@ class CasaController extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
-    projects = rows(await api.call('GET', '/projects'));
-    clients = rows(await api.call('GET', '/clients'));
-    reservations = rows(await api.call('GET', '/reservations'));
+    final data = await Future.wait([
+      api.call('GET', '/projects'),
+      api.call('GET', '/clients'),
+      api.call('GET', '/reservations'),
+    ]);
+    projects = rows(data[0]);
+    clients = rows(data[1]);
+    reservations = rows(data[2]);
+    await Future.wait([loadClients(), loadOperations()]);
     await pollNotifications();
   }
 
@@ -90,6 +156,15 @@ class CasaController extends ChangeNotifier {
 
   void clear() {
     _notificationsTimer?.cancel();
+    ++_clientLoad;
+    ++_operationLoad;
+    ++_historyLoad;
+    listedClients = [];
+    listedOperations = [];
+    historyUsers = [];
+    clientMonth = operationMonth = historyMonth = businessMonth();
+    clientCategory = operationState = historyEntity = '';
+    historyUser = null;
     notifications = [];
     users = [];
     catalog = [];

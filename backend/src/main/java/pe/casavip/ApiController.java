@@ -19,24 +19,28 @@ public class ApiController {
   private final DocumentService documents;
   private final ReportService reports;
   private final OperationsService operations;
+  private final CommercialQueries queries;
 
   public ApiController(
       CommercialDao dao,
       CommercialService service,
       AuthService auth,
       DocumentService documents,
-      ReportService reports, OperationsService operations) {
+      ReportService reports,
+      OperationsService operations,
+      CommercialQueries queries) {
     this.dao = dao;
     this.service = service;
     this.auth = auth;
     this.documents = documents;
     this.reports = reports;
-    this.operations=operations;
+    this.operations = operations;
+    this.queries = queries;
   }
 
   @GetMapping("/health")
   public Object health() {
-    return Map.of("status", "UP", "version", "0.4.0");
+    return Map.of("status", "UP", "version", "0.5.0");
   }
 
   @PostMapping("/auth/login")
@@ -113,8 +117,11 @@ public class ApiController {
 
   @GetMapping("/clients")
   public Object clients(
-      @AuthenticationPrincipal Actor a, @RequestParam(required = false) String q) {
-    return operations.clients(a, q);
+      @AuthenticationPrincipal Actor a,
+      @RequestParam(required = false) String q,
+      @RequestParam(required = false) String month,
+      @RequestParam(required = false) String category) {
+    return queries.clients(a, q, month, category);
   }
 
   @PostMapping("/clients")
@@ -149,8 +156,11 @@ public class ApiController {
   }
 
   @GetMapping("/reservations")
-  public Object reservations(@AuthenticationPrincipal Actor a) {
-    return operations.operations(a);
+  public Object reservations(
+      @AuthenticationPrincipal Actor a,
+      @RequestParam(required = false) String month,
+      @RequestParam(required = false) String state) {
+    return queries.operations(a, month, state);
   }
 
   @PostMapping("/reservations")

@@ -63,17 +63,10 @@ extension _CommercialExtension on _CasaViewState {
         onChanged: (_) => repaint(readDraft),
       ),
       space(10),
-      infoNote(
-        'Las condiciones se guardan en esta operación. La mensualidad se calcula sin intereses; la última cuota absorbe el redondeo.',
-        compact: true,
-      ),
     ],
   );
-  bool hasSale(Data client) => c.reservations.any(
-    (r) =>
-        r['estado'] == 'CONFIRMADA' &&
-        (r['cliente_id'] == client['id'] || r['cotitular_id'] == client['id']),
-  );
+  bool hasSale(Data client) =>
+      clientOperations(client).any((r) => r['estado'] == 'CONFIRMADA');
   void loadPersonForm(Data profile) {
     names.text = '${profile['nombre'] ?? ''}';
     document.text = '${profile['numero_documento'] ?? ''}';
@@ -383,14 +376,7 @@ extension _CommercialExtension on _CasaViewState {
                   op['estado'] == 'CONFIRMADA' ? 'VENDIDO' : op['estado'],
                 ),
                 space(16),
-                Text(
-                  operationText(op),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.65,
-                    color: ink,
-                  ),
-                ),
+                operationVisual(op),
               ],
             ),
             padding: const EdgeInsets.all(20),
@@ -557,10 +543,6 @@ extension _CommercialExtension on _CasaViewState {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    infoNote(
-                      'Se conservan las condiciones de esta operación, independientemente del catálogo.',
-                      compact: true,
-                    ),
                     space(14),
                     field(
                       'Precio acordado (S/)',
@@ -812,8 +794,9 @@ extension _CommercialExtension on _CasaViewState {
       );
     }
     if (screen == 'history-all') {
-      c.history = cv.CasaController.rows(
-        await c.api.call('GET', '/admin/history'),
+      await c.loadHistory();
+      c.historyUsers = cv.CasaController.rows(
+        await c.api.call('GET', '/admin/history/users'),
       );
     }
     go(screen);
@@ -823,11 +806,7 @@ extension _CommercialExtension on _CasaViewState {
     children: [
       if (c.admin) primary('Agregar usuario', () => userEditor()),
       space(12),
-      if (!c.admin)
-        infoNote(
-          'Puedes consultar la lista y deshabilitar usuarios. La creación, edición y habilitación corresponden al administrador.',
-          compact: true,
-        ),
+      if (!c.admin) const SizedBox.shrink(),
       for (final u in c.users) ...[
         space(10),
         uiBox(
@@ -1012,10 +991,7 @@ extension _CommercialExtension on _CasaViewState {
   Widget catalogPage() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      infoNote(
-        'Los lotes vendidos se omiten. Las separaciones conservan las condiciones pactadas. Usa lote_id para identificar cada lote.',
-        compact: true,
-      ),
+      infoNote('Los lotes vendidos conservan sus datos.', compact: true),
       space(14),
       primary('Importar CSV, Excel o JSON', previewCatalog),
       space(8),
@@ -1129,7 +1105,7 @@ extension _CommercialExtension on _CasaViewState {
                 field('Ubicación', location, maxLength: 160),
                 space(10),
                 infoNote(
-                  'Esta edición publica un plan para este lote. Para publicar varios planes usa JSON con la propiedad planes.',
+                  'Este lote tendrá un único plan de pago.',
                   compact: true,
                 ),
               ],
@@ -1168,80 +1144,9 @@ extension _CommercialExtension on _CasaViewState {
     });
   }
 
-  Widget historyPage() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Wrap(
-        spacing: 6,
-        children: [
-          for (final e in [
-            ('', 'Todos'),
-            ('CLIENTE', 'Clientes'),
-            ('OPERACION', 'Operaciones'),
-            ('CATALOGO', 'Precios'),
-            ('USUARIO', 'Usuarios'),
-          ])
-            ChoiceChip(
-              label: Text(e.$2),
-              selected: historyFilter == e.$1,
-              onSelected: (_) => run(() async {
-                historyFilter = e.$1;
-                c.history = cv.CasaController.rows(
-                  await c.api.call(
-                    'GET',
-                    '/admin/history${historyFilter.isEmpty ? '' : '?entity=$historyFilter'}',
-                  ),
-                );
-              }),
-            ),
-        ],
-      ),
-      space(14),
-      for (final h in c.history) ...[
-        uiBox(
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              '${h['entidad']} #${h['registro_id']} · ${h['accion']}',
-            ),
-            subtitle: Text(
-              '${h['usuario']} · ${dateText(when(h['fecha']))}\n${h['motivo']}',
-            ),
-            onTap: () => showDialog<void>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Detalle guardado'),
-                content: SingleChildScrollView(
-                  child: SelectableText(
-                    const JsonEncoder.withIndent('  ').convert({
-                      'anterior': h['anterior'],
-                      'actual': h['actual'],
-                    }),
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Cerrar'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        space(8),
-      ],
-      if (c.history.isEmpty)
-        empty('No hay cambios registrados con este filtro.'),
-    ],
-  );
   Widget notificationPage() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      infoNote(
-        'Avisos globales de separaciones, ventas y liberaciones. Se actualizan cada 15 segundos mientras mantienes la sesión abierta.',
-        compact: true,
-      ),
       space(10),
       Row(
         children: [
