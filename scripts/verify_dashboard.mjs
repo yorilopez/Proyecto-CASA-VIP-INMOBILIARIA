@@ -25,7 +25,7 @@ export async function verifyDashboard({page,root,click,enter,capture}) {
   await page.getByRole('textbox',{name:/^Correo corporativo/}).click();
   if(await page.locator('input:focus').inputValue()!=='')throw Error('Cerrar sesión conservó el correo');
   await enter('Correo corporativo','responsable@casavip.pe');await enter('Contraseña','CasaVIP-demo-2026!');
-  await page.getByRole('checkbox',{name:'Mantener sesión iniciada'}).click();await click('Ingresar');
+  await page.getByRole('checkbox',{name:'Mantener sesión iniciada'}).click();await click('Ingresar');await page.getByText('Dashboard',{exact:true}).waitFor();
   await page.reload({waitUntil:'networkidle'});await page.waitForTimeout(1500);
   const sem=page.locator('flt-semantics-placeholder');if(await sem.count())await sem.dispatchEvent('click');
   await page.getByText('Dashboard',{exact:true}).waitFor();
