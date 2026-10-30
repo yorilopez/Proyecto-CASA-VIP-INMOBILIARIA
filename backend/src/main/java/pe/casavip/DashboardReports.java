@@ -86,14 +86,14 @@ public class DashboardReports {
       }
       boolean first=true;
       for(var block:records){
-        int heading=first?2:0;
-        if(!current.isEmpty() && current.size()+heading+block.size()>capacity){pages.add(current);current=new ArrayList<>();first=true;}
+        int headingLines=first?2:0;
+        if(!current.isEmpty() && current.size()+headingLines+block.size()>capacity){pages.add(current);current=new ArrayList<>();first=true;}
         if(first){current.add("");current.add(label);first=false;}
         int offset=0;
         while(offset<block.size()){
           int take=Math.min(capacity-current.size(),block.size()-offset);
           current.addAll(block.subList(offset,offset+take));offset+=take;
-          if(offset<block.size()){pages.add(current);current=new ArrayList<>();current.add(label+" (continuación)");current.add("Registro "+n+" (continuación)");}
+          if(offset<block.size()){pages.add(current);current=new ArrayList<>();current.add(label+" (continuación)");current.add(block.get(1)+" (continuación)");}
         }
       }
     }
