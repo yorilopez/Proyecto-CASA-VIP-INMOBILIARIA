@@ -1,6 +1,14 @@
 package pe.casavip.casa_vip
 
 import android.app.Activity
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 import android.content.ClipData
 import android.content.Intent
 import android.provider.MediaStore
@@ -14,6 +22,27 @@ import java.util.UUID
 
 // Selección, captura y compartición mediante URI temporales del sistema.
 class MainActivity : FlutterActivity() {
+    private var reportResult: MethodChannel.Result? = null
+    private var reportBytes: ByteArray? = null
+    private val requestSave = 4102
+    private val preferences by lazy { getSharedPreferences("casavip.secure", MODE_PRIVATE) }
+    private fun storageKey(): SecretKey {
+        val store=KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (store.getKey("casavip.session",null) as? SecretKey)?.let { return it }
+        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore").apply {
+            init(KeyGenParameterSpec.Builder("casavip.session",KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
+        }.generateKey()
+    }
+    private fun encrypt(value:String):String {
+        val cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,storageKey())
+        return Base64.encodeToString(cipher.iv,Base64.NO_WRAP)+":"+Base64.encodeToString(cipher.doFinal(value.toByteArray(Charsets.UTF_8)),Base64.NO_WRAP)
+    }
+    private fun decrypt(value:String):String {
+        val parts=value.split(":");val cipher=Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE,storageKey(),GCMParameterSpec(128,Base64.decode(parts[0],Base64.NO_WRAP)))
+        return String(cipher.doFinal(Base64.decode(parts[1],Base64.NO_WRAP)),Charsets.UTF_8)
+    }
     private var pending: MethodChannel.Result? = null
     private var capture: File? = null
     private var catalogMode = false
@@ -25,6 +54,34 @@ class MainActivity : FlutterActivity() {
         MethodChannel(engine.dartExecutor.binaryMessenger, "pe.casavip/files")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "readSetting" -> {
+                        val key=call.argument<String>("key") ?: ""
+                        try { result.success(preferences.getString(key,null)?.let { decrypt(it) }) }
+                        catch(_:Exception) { preferences.edit().remove(key).commit();result.success(null) }
+                    }
+                    "writeSetting" -> {
+                        try {
+                            val key=call.argument<String>("key") ?: throw IllegalArgumentException()
+                            val value=call.argument<String>("value") ?: throw IllegalArgumentException()
+                            if(!preferences.edit().putString(key,encrypt(value)).commit())throw IllegalStateException()
+                            result.success(null)
+                        } catch(_:Exception){result.error("STORAGE","No se pudo guardar la sesión en este equipo.",null)}
+                    }
+                    "deleteSetting" -> {
+                        if(preferences.edit().remove(call.argument<String>("key") ?: "").commit())result.success(null)
+                        else result.error("STORAGE","No se pudo limpiar la sesión.",null)
+                    }
+                    "saveReport" -> {
+                        if(reportResult!=null)result.error("BUSY","Hay una descarga pendiente.",null)
+                        else try {
+                            reportBytes=call.argument<ByteArray>("bytes");reportResult=result
+                            startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type=call.argument<String>("mime") ?: "application/octet-stream"
+                                putExtra(Intent.EXTRA_TITLE,File(call.argument<String>("name") ?: "reporte.pdf").name)
+                            },requestSave)
+                        } catch(_:Exception){reportBytes=null;reportResult=null;result.error("SAVE_FAILED","No se pudo abrir el guardado del reporte.",null)}
+                    }
                     "pickFile" -> {
                         if(pending!=null) result.error("BUSY","Hay una selección pendiente.",null)
                         else { pending=result;catalogMode=true
@@ -128,6 +185,18 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Compatible con el canal de selección de Flutter")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if(requestCode==requestSave) {
+            val reply=reportResult;reportResult=null
+            try {
+                if(resultCode==Activity.RESULT_OK && data?.data!=null){
+                    contentResolver.openOutputStream(data.data!!)?.use { it.write(reportBytes ?: byteArrayOf()) }
+                        ?: throw IllegalStateException()
+                }
+                reply?.success(null)
+            } catch(_:Exception){reply?.error("SAVE_FAILED","No se pudo guardar el reporte.",null)}
+            finally { reportBytes=null }
+            return
+        }
         if (requestCode != requestImage) return
         val reply = pending ?: return
         pending = null

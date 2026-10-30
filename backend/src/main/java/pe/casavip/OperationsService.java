@@ -339,16 +339,16 @@ public class OperationsService {
                 + " then false else true end as leida,case when (?=true or s.asesor_id=?) then"
                 + " n.operacion_id else null end as operacion_id from notificacion n left join"
                 + " separacion s on s.id=n.operacion_id left join notificacion_lectura nr on"
-                + " nr.notificacion_id=n.id and nr.usuario_id=? order by n.id desc limit 100",
+                + " nr.notificacion_id=n.id and nr.usuario_id=? where (n.tipo<>'VENCIMIENTO' or ((?=true or s.asesor_id=?) and s.estado='ACTIVA' and s.fecha_vencimiento<=CURRENT_TIMESTAMP and n.vencimiento_referencia=s.fecha_vencimiento and s.vencimiento_avisado=s.fecha_vencimiento)) order by n.id desc limit 100",
             a.manager(),
             a.id(),
-            a.id());
+            a.id(),a.manager(),a.id());
     var count =
         d.scalar(
-            "select count(*) from notificacion n where not exists(select 1 from"
+            "select count(*) from notificacion n left join separacion s on s.id=n.operacion_id where (n.tipo<>'VENCIMIENTO' or ((?=true or s.asesor_id=?) and s.estado='ACTIVA' and s.fecha_vencimiento<=CURRENT_TIMESTAMP and n.vencimiento_referencia=s.fecha_vencimiento and s.vencimiento_avisado=s.fecha_vencimiento)) and not exists(select 1 from"
                 + " notificacion_lectura nr where nr.notificacion_id=n.id and nr.usuario_id=?)",
             Long.class,
-            a.id());
+            a.manager(),a.id(),a.id());
     return Map.of("items", items, "pendientes", count);
   }
 

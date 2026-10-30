@@ -23,27 +23,10 @@ extension _ListingUi on _CasaViewState {
           ),
         ),
       );
-  Widget clientFilterControls() => Column(
-    children: [
-      DropdownButtonFormField<String>(
-        key: ValueKey(c.clientCategory),
-        initialValue: c.clientCategory,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Tipo de cliente'),
-        items: [
-          for (final value in ['', 'POTENCIAL', 'SEPARACION', 'VENTA'])
-            DropdownMenuItem(
-              value: value,
-              child: Text(clientCategoryLabel(value)),
-            ),
-        ],
-        onChanged: (value) => run(() async {
-          c.clientCategory = value ?? '';
-          await c.loadClients();
-        }),
-      ),
-      filterSummary('Registro de clientes', c.clientMonth, clientFilters),
-    ],
+  Widget clientFilterControls() => filterSummary(
+    clientCategoryLabel(c.clientCategory),
+    c.clientMonth,
+    clientFilters,
   );
 
   Future<Map<String, dynamic>?> listingFilters({
@@ -58,6 +41,7 @@ extension _ListingUi on _CasaViewState {
     bool all = month.isEmpty;
     String kind = category;
     int? user = c.historyUser;
+    String action = c.historyAction;
     return showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
@@ -95,6 +79,30 @@ extension _ListingUi on _CasaViewState {
                   ),
                   space(12),
                   if (history) ...[
+                    DropdownButtonFormField<String>(
+                      initialValue: action,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Acción'),
+                      items:
+                          const {
+                                '': 'Todas las acciones',
+                                'SEPARACION': 'Separaciones',
+                                'VENTA': 'Ventas',
+                                'LIBERACION': 'Liberaciones',
+                                'PLAZO': 'Cambios de plazo',
+                                'MODIFICAR': 'Correcciones',
+                                'REASIGNAR': 'Reasignaciones',
+                              }.entries
+                              .map(
+                                (e) => DropdownMenuItem(
+                                  value: e.key,
+                                  child: Text(e.value),
+                                ),
+                              )
+                              .toList(),
+                      onChanged: (v) => update(() => action = v ?? ''),
+                    ),
+                    space(12),
                     DropdownButtonFormField<int>(
                       initialValue: user ?? 0,
                       isExpanded: true,
@@ -176,6 +184,7 @@ extension _ListingUi on _CasaViewState {
                           : '$year-${selectedMonth.toString().padLeft(2, '0')}',
                       'category': kind,
                       'user': user,
+                      'action': action,
                     }),
                   ),
                   space(6),
@@ -189,6 +198,7 @@ extension _ListingUi on _CasaViewState {
                       year = now.year;
                       kind = '';
                       user = null;
+                      action = '';
                     }),
                     child: const Text('Restablecer al mes actual'),
                   ),
@@ -256,6 +266,7 @@ extension _ListingUi on _CasaViewState {
       c.historyMonth = result['month'];
       c.historyEntity = result['category'];
       c.historyUser = result['user'];
+      c.historyAction = result['action'];
       await c.loadHistory();
     });
   }
@@ -379,6 +390,14 @@ extension _ListingUi on _CasaViewState {
         sectionTitle('Registro de la operación', top: 16),
         detailLine('Asesor', op['asesor_nombre']),
         detailLine('Fecha de separación', displayDate(op['fecha_registro'])),
+        detailLine(
+          'Plazo',
+          op['plazo_dias'] == null
+              ? 'Pendiente de definir'
+              : '${op['plazo_dias']} días',
+        ),
+        if (op['fecha_vencimiento'] != null)
+          detailLine('Vencimiento', displayDate(op['fecha_vencimiento'])),
         if (op['venta'] != null)
           detailLine('Fecha de venta', displayDate(op['venta']['fecha_venta'])),
         detailLine('Observaciones', op['observacion']),
@@ -572,14 +591,25 @@ extension _ListingUi on _CasaViewState {
   Widget historyPage() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      OutlinedButton.icon(
-        onPressed: historyFilters,
-        icon: const Icon(Icons.tune_rounded),
-        label: const Text('Filtrar historial'),
+      Row(
+        children: [
+          Expanded(
+            child: TextButton.icon(
+              onPressed: () => openManagement('dashboard'),
+              icon: const Icon(Icons.dashboard_outlined),
+              label: const Text('Dashboard'),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: () => downloadReport(history: true),
+            icon: const Icon(Icons.download_outlined),
+            label: const Text('Descargar'),
+          ),
+        ],
       ),
       filterSummary(
         c.historyUser == null
-            ? 'Todos los usuarios'
+            ? 'Todas las acciones${c.historyAction.isEmpty ? '' : ' · ${readable(c.historyAction)}'}'
             : c.historyUsers
                       .where((u) => u['id'] == c.historyUser)
                       .map((u) => '${u['nombre']}')

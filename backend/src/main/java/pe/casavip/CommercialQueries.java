@@ -15,7 +15,7 @@ public class CommercialQueries {
           + " h.estado_nuevo='DISPONIBLE' and h.estado_anterior='RESERVADO')";
   private static final String OPERATIONS =
       "select"
-          + " s.id,s.lote_id,s.cliente_id,s.cotitular_id,s.asesor_id,s.monto,s.fecha_registro,s.estado,s.observacion,s.precio_acordado,s.inicial_acordada,s.cuota_acordada,s.numero_cuotas_acordado,s.version,c.nombre"
+          + " s.id,s.lote_id,s.cliente_id,s.cotitular_id,s.asesor_id,s.monto,s.fecha_registro,s.fecha_vencimiento,s.plazo_dias,s.estado,s.observacion,s.precio_acordado,s.inicial_acordada,s.cuota_acordada,s.numero_cuotas_acordado,s.version,c.nombre"
           + " as cliente,m.codigo as manzana,l.codigo as lote,p.nombre as proyecto,e.nombre as"
           + " etapa,v.id as venta_id,v.precio_final,v.inicial as inicial_venta,v.numero_cuotas as"
           + " cuotas_venta,v.mensualidad as mensualidad_venta,v.fecha_venta,"
@@ -140,7 +140,9 @@ public class CommercialQueries {
     return people;
   }
 
-  public List<Map<String, Object>> history(Actor a, String entity, String month, Long user) {
+  public List<Map<String, Object>> history(Actor a, String entity, String month, Long user) {return history(a,entity,month,user,null);}
+
+  public List<Map<String, Object>> history(Actor a, String entity, String month, Long user, String action) {
     BusinessRules.requireManager(a.role());
     var args = new ArrayList<Object>();
     var sql =
@@ -152,6 +154,10 @@ public class CommercialQueries {
         throw new IllegalArgumentException("Tipo de historial inválido.");
       sql.append(" and h.entidad=?");
       args.add(entity);
+    }
+    if(action!=null&&!action.isBlank()){
+      if(!Set.of("SEPARACION","VENTA","LIBERACION","PLAZO","MODIFICAR","REASIGNAR").contains(action))throw new IllegalArgumentException("Acción de historial inválida.");
+      sql.append(" and h.accion=?");args.add(action);
     }
     if (user != null) {
       if (user < 1) throw new IllegalArgumentException("Usuario inválido.");

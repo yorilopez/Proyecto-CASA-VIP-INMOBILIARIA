@@ -14,12 +14,14 @@ public class CommercialService {
   private final CommercialDao dao;
   private final PrototypeDao prototype;
   private final OperationsDao ledger;
+  private final ReservationDeadlines deadlines;
   private static final Logger log = LoggerFactory.getLogger(CommercialService.class);
 
-  public CommercialService(CommercialDao dao, PrototypeDao prototype, OperationsDao ledger) {
+  public CommercialService(CommercialDao dao, PrototypeDao prototype, OperationsDao ledger, ReservationDeadlines deadlines) {
     this.dao = dao;
     this.prototype = prototype;
     this.ledger = ledger;
+    this.deadlines = deadlines;
   }
 
   public static long id(Map<String, Object> r, String key) {
@@ -168,6 +170,7 @@ public class CommercialService {
       }
     }
     long id = dao.reserve(in.lote_id(), in.cliente_id(), a.id(), in.monto(), in.observacion());
+    deadlines.initialize(id,in.monto(),in.plazo_dias());
     prototype.terms(id, lot, plan, in.cotitular_id());
     ledger.terms(id,price,initial,count);
     dao.lotState(in.lote_id(), "RESERVADO");

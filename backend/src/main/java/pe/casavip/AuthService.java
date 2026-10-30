@@ -45,7 +45,7 @@ public class AuthService {
     byte[] bytes = new byte[32];
     new java.security.SecureRandom().nextBytes(bytes);
     String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    Instant expires = Instant.now().plus(Duration.ofHours(2));
+    Instant expires = Instant.now().plus(in.remember()?Duration.ofDays(30):Duration.ofHours(2));
     dao.sessionAdd(CommercialService.id(user, "id"), DigestUtils.sha256Hex(token), expires);
     return Map.of("token", token, "expires", expires.toString(), "user", actor(user));
   }

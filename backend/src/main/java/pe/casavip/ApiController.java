@@ -40,7 +40,7 @@ public class ApiController {
 
   @GetMapping("/health")
   public Object health() {
-    return Map.of("status", "UP", "version", "0.5.0");
+    return Map.of("status", "UP", "version", "0.6.0");
   }
 
   @PostMapping("/auth/login")

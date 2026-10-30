@@ -129,3 +129,21 @@ Future<void> shareFile(Uint8List bytes, String name, String mime) async {
   link.remove();
   Timer(const Duration(seconds: 30), () => web.URL.revokeObjectURL(url));
 }
+
+Future<String?> readSetting(String key) async =>
+    web.window.localStorage.getItem('casavip.$key');
+Future<void> writeSetting(String key, String value) async =>
+    web.window.localStorage.setItem('casavip.$key', value);
+Future<void> deleteSetting(String key) async =>
+    web.window.localStorage.removeItem('casavip.$key');
+Future<void> saveReport(Uint8List bytes, String name, String mime) async {
+  final blob = web.Blob([bytes.toJS].toJS, web.BlobPropertyBag(type: mime));
+  final url = web.URL.createObjectURL(blob);
+  final link = web.HTMLAnchorElement()
+    ..href = url
+    ..download = name;
+  web.document.body!.appendChild(link);
+  link.click();
+  link.remove();
+  Timer(const Duration(seconds: 30), () => web.URL.revokeObjectURL(url));
+}

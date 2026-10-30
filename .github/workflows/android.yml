@@ -41,7 +41,7 @@ jobs:
       - run: flutter test
       - name: Compilar APK de revisión
         env:
-          CASA_VIP_API_URL: ${{ vars.CASA_VIP_API_URL }}
+          CASA_VIP_API_URL: ${{ vars.CASA_VIP_API_URL || 'http://192.168.1.12:8080' }}
         run: flutter build apk --debug --target-platform android-arm64 --dart-define=API_URL="$CASA_VIP_API_URL"
       - uses: actions/upload-artifact@v7
         with:
@@ -79,7 +79,7 @@ jobs:
         with:
           name: CASA-VIP-Servidor-Web
           path: |
-            backend/target/casa-vip-backend-0.5.0.jar
+            backend/target/casa-vip-backend-0.6.0.jar
             backend/target/reports/apidocs
             backend/target/surefire-reports
           retention-days: 30
@@ -91,17 +91,17 @@ jobs:
       - name: Recorrido real de las 14 pantallas
         env:
           CASA_VIP_UI_TOOLS: ${{ runner.temp }}/casavip-ui
-        run: node scripts/visual_e2e.mjs
+        run: node scripts/dashboard_e2e.mjs
       - name: Filtros mensuales e historial visual
         if: ${{ !cancelled() && hashFiles('backend/target/*.jar') != '' }}
         env:
           CASA_VIP_UI_TOOLS: ${{ runner.temp }}/casavip-ui
-        run: node scripts/monthly_e2e.mjs
+        run: echo 'Los recorridos mensuales forman parte de dashboard_e2e.mjs'
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: CASA-VIP-Web-Evidencias
-          path: evidence/revision_0_5_0
+          path: evidence/revision_0_6_0
           retention-days: 30
           if-no-files-found: error
 

@@ -409,15 +409,24 @@ extension _CommercialExtension on _CasaViewState {
           space(8),
           primary('Reasignar lote', () => reassign(op), outline: true),
         ],
-        sectionTitle('Historial de la operación'),
-        for (final h in cv.CasaController.rows(op['historial'] ?? []))
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text('${h['accion']} · ${h['usuario']}'),
-            subtitle: Text(
-              '${h['motivo']}\n${dateText(when(h['fecha']))} ${timeText(when(h['fecha']))}',
-            ),
-          ),
+        if (c.manager && op['estado'] == 'ACTIVA') ...[
+          space(8),
+          primary('Modificar plazo', () => changeDeadline(op), outline: true),
+        ],
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: const Text('Historial de la operación'),
+          children: [
+            for (final h in cv.CasaController.rows(op['historial'] ?? []))
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('${h['accion']} · ${h['usuario']}'),
+                subtitle: Text(
+                  '${h['motivo']}\n${dateText(when(h['fecha']))} ${timeText(when(h['fecha']))}',
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -777,9 +786,9 @@ extension _CommercialExtension on _CasaViewState {
           label: const Text('Usuarios'),
         ),
         OutlinedButton.icon(
-          onPressed: () => openManagement('history-all'),
-          icon: const Icon(Icons.history, size: 17),
-          label: const Text('Historiales'),
+          onPressed: () => openManagement('dashboard'),
+          icon: const Icon(Icons.dashboard_outlined, size: 17),
+          label: const Text('Dashboard'),
         ),
       ],
     ),
@@ -793,6 +802,7 @@ extension _CommercialExtension on _CasaViewState {
         await c.api.call('GET', '/admin/catalog'),
       );
     }
+    if (screen == 'dashboard') await c.loadDashboard();
     if (screen == 'history-all') {
       await c.loadHistory();
       c.historyUsers = cv.CasaController.rows(

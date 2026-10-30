@@ -294,6 +294,7 @@ Future<void> photos(WidgetTester t, {bool co = false}) async {
 }
 
 void main() {
+  setUp(mockFiles);
   testWidgets('El formulario exige credenciales antes de enviar', (t) async {
     dimensions(t);
     final f = Fixture();
@@ -600,14 +601,20 @@ void main() {
     await t.pumpWidget(CasaVipApp(api: f.api));
     await login(t);
     await tapText(t, 'Clientes');
+    await t.tap(find.textContaining('clientes ·').first);
+    await t.pumpAndSettle();
     await t.tap(find.byType(DropdownButtonFormField<String>).first);
     await t.pumpAndSettle();
     await tapText(t, 'Con venta', last: true);
+    await tapText(t,'Aplicar filtros');
     expect(find.text('Cliente vendido'), findsOneWidget);
     expect(find.text('Cliente reservado'), findsNothing);
+    await t.tap(find.textContaining('Con venta ·').first);
+    await t.pumpAndSettle();
     await t.tap(find.byType(DropdownButtonFormField<String>).first);
     await t.pumpAndSettle();
     await tapText(t, 'Con separación', last: true);
+    await tapText(t,'Aplicar filtros');
     expect(find.text('Cliente reservado'), findsOneWidget);
     expect(find.text('Cliente vendido'), findsNothing);
     expect(find.text('Operaciones'), findsOneWidget);

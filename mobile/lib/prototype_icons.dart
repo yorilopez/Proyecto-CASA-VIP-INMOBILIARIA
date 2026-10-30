@@ -38,6 +38,14 @@ class _IconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
     switch (name) {
+      case 'download':
+        canvas.drawLine(const Offset(12, 3), const Offset(12, 15), paint);
+        canvas.drawLine(const Offset(7, 10), const Offset(12, 15), paint);
+        canvas.drawLine(const Offset(12, 15), const Offset(17, 10), paint);
+        canvas.drawLine(const Offset(4, 17), const Offset(4, 21), paint);
+        canvas.drawLine(const Offset(4, 21), const Offset(20, 21), paint);
+        canvas.drawLine(const Offset(20, 21), const Offset(20, 17), paint);
+        break;
       case 'arrow-left':
         {
           final p = Path();
