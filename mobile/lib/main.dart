@@ -12,9 +12,11 @@ import 'platform_io.dart' as files;
 import 'prototype_style.dart';
 import 'financial_terms.dart';
 import 'listing_filter.dart';
+import 'deadline.dart';
 
 part 'commercial_extension.dart';
 part 'listing_ui.dart';
+part 'dashboard_ui.dart';
 
 void main() => runApp(const CasaVipApp());
 
@@ -90,6 +92,8 @@ class _CasaViewState extends State<CasaView> {
       coAddress = TextEditingController(),
       coMail = TextEditingController(),
       coOccupation = TextEditingController();
+  final deadlineDays = TextEditingController(text: '14');
+  bool rememberSession = false, hadSession = false;
   final amount = TextEditingController(text: '500.00'),
       observation = TextEditingController(),
       search = TextEditingController();
@@ -175,9 +179,25 @@ class _CasaViewState extends State<CasaView> {
         : (kIsWeb ? Uri.base.origin : 'http://10.0.2.2:8080');
     c = cv.CasaController(widget.api ?? ApiClient(base));
     c.addListener(changed);
+    amount.addListener(amountChanged);
+    if (widget.api == null) unawaited(c.restoreSession());
+  }
+
+  void amountChanged() {
+    final value = num.tryParse(amount.text.replaceAll(',', '.')) ?? 0;
+    final days = defaultDeadline(value);
+    deadlineDays.text = days?.toString() ?? '';
+    if (mounted) setState(() {});
   }
 
   void changed() {
+    if (c.user != null) hadSession = true;
+    if (c.screen == 'login' && hadSession) {
+      email.clear();
+      password.clear();
+      rememberSession = false;
+      hadSession = false;
+    }
     if (mounted) setState(() {});
   }
 
@@ -199,6 +219,7 @@ class _CasaViewState extends State<CasaView> {
       coMail,
       coOccupation,
       amount,
+      deadlineDays,
       observation,
       search,
       negotiatedPrice,
@@ -485,8 +506,8 @@ class _CasaViewState extends State<CasaView> {
                   ),
                 if (c.manager && screen == 'reservations')
                   const PopupMenuItem(
-                    value: 'excel',
-                    child: Text('Exportar reporte Excel'),
+                    value: 'dashboard',
+                    child: Text('Dashboard y reportes'),
                   ),
                 if (c.admin)
                   const PopupMenuItem(
@@ -497,8 +518,8 @@ class _CasaViewState extends State<CasaView> {
                   const PopupMenuItem(value: 'users', child: Text('Usuarios')),
                 if (c.manager)
                   const PopupMenuItem(
-                    value: 'history-all',
-                    child: Text('Historiales comerciales'),
+                    value: 'dashboard',
+                    child: Text('Dashboard y reportes'),
                   ),
                 const PopupMenuItem(
                   value: 'logout',
@@ -511,7 +532,7 @@ class _CasaViewState extends State<CasaView> {
         ),
       );
   void accountAction(String action) {
-    if (['catalog', 'users', 'history-all'].contains(action)) {
+    if (['catalog', 'users', 'history-all', 'dashboard'].contains(action)) {
       openManagement(action);
       return;
     }
@@ -622,7 +643,8 @@ class _CasaViewState extends State<CasaView> {
                       'notifications' => 'Notificaciones',
                       'users' => 'Usuarios',
                       'catalog' => 'Catálogo y precios',
-                      'history-all' => 'Historiales comerciales',
+                      'history-all' => 'Historial comercial',
+                      'dashboard' => 'Dashboard comercial',
                       _ => 'CASA VIP',
                     },
                     switch (screen) {
@@ -749,6 +771,7 @@ class _CasaViewState extends State<CasaView> {
     'users' => usersPage(),
     'catalog' => catalogPage(),
     'history-all' => historyPage(),
+    'dashboard' => dashboardPage(),
     _ => const SizedBox.shrink(),
   };
   Widget login() => ColoredBox(
@@ -823,15 +846,38 @@ class _CasaViewState extends State<CasaView> {
                     hint: '••••••••',
                   ),
                   space(17),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text(
+                      'Mantener sesión iniciada',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    value: rememberSession,
+                    onChanged: (v) =>
+                        setState(() => rememberSession = v ?? false),
+                  ),
                   primary(
                     'Ingresar',
                     () => run(() async {
                       if (loginKey.currentState!.validate()) {
-                        await c.login(email.text.trim(), password.text);
+                        await c.login(
+                          email.text.trim(),
+                          password.text,
+                          remember: rememberSession,
+                        );
+                        email.clear();
+                        password.clear();
                       }
                     }),
                     after: 'arrow-right',
                   ),
+                  if (!kIsWeb)
+                    TextButton.icon(
+                      onPressed: busy ? null : configureServer,
+                      icon: const Icon(Icons.settings_ethernet, size: 16),
+                      label: const Text('Conexión al servidor'),
+                    ),
                 ],
               ),
             ),
@@ -1168,31 +1214,33 @@ class _CasaViewState extends State<CasaView> {
           ),
         ),
       ),
-      const SizedBox(width: 9),
-      Semantics(
-        button: true,
-        label: onAdd != null ? 'Nuevo cliente' : filterLabel ?? 'Filtrar',
-        child: tap(
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: onAdd != null ? primaryGold : Colors.white,
-              border: onAdd != null
-                  ? null
-                  : Border.all(color: const Color(0xffdcd8cf)),
-              borderRadius: BorderRadius.circular(11),
+      if (onAdd != null || onFilter != null) ...[
+        const SizedBox(width: 9),
+        Semantics(
+          button: true,
+          label: onAdd != null ? 'Nuevo cliente' : filterLabel ?? 'Filtrar',
+          child: tap(
+            Container(
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: onAdd != null ? primaryGold : Colors.white,
+                border: onAdd != null
+                    ? null
+                    : Border.all(color: const Color(0xffdcd8cf)),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: ico(
+                onAdd != null ? 'plus' : 'list-filter',
+                size: onAdd != null ? 24 : 19,
+                color: onAdd != null ? Colors.white : const Color(0xff5f5c54),
+              ),
             ),
-            child: ico(
-              onAdd != null ? 'plus' : 'list-filter',
-              size: onAdd != null ? 24 : 19,
-              color: onAdd != null ? Colors.white : const Color(0xff5f5c54),
-            ),
+            onAdd ?? onFilter,
           ),
-          onAdd ?? onFilter,
         ),
-      ),
+      ],
     ],
   );
   Widget projects() {
@@ -2799,6 +2847,19 @@ class _CasaViewState extends State<CasaView> {
             keyboard: const TextInputType.numberWithOptions(decimal: true),
           ),
           space(15),
+          field(
+            'Plazo de separación (días)',
+            deadlineDays,
+            required: true,
+            keyboard: TextInputType.number,
+            validate: (v) => validateDeadline(
+              v,
+              num.tryParse(amount.text.replaceAll(',', '.')) ?? 0,
+            ),
+          ),
+          space(6),
+          tx(deadlinePreview(), size: 12, color: muted),
+          space(15),
           tx(
             'Plan de financiamiento',
             size: 12.64,
@@ -3075,6 +3136,7 @@ class _CasaViewState extends State<CasaView> {
                 () => c.reserve(
                   num.parse(amount.text.replaceAll(',', '.')),
                   observation.text.trim(),
+                  days: int.tryParse(deadlineDays.text),
                 ),
               )
             : null,
@@ -3439,11 +3501,7 @@ class _CasaViewState extends State<CasaView> {
           ),
         ),
         space(12),
-        searchRow(
-          'Proyecto, lote o cliente',
-          onFilter: operationFilters,
-          filterLabel: 'Filtrar operaciones',
-        ),
+        searchRow('Proyecto, lote o cliente'),
         space(10),
         filterSummary(
           operationStateLabel(c.operationState),

@@ -98,10 +98,11 @@ public class OperationsController {
   @GetMapping("/admin/history")
   public Object history(
       @RequestParam(required = false) String entity,
+      @RequestParam(required = false) String action,
       @RequestParam(required = false) String month,
       @RequestParam(required = false) Long user,
       @AuthenticationPrincipal Actor a) {
-    return queries.history(a, entity, month, user);
+    return queries.history(a, entity, month, user, action);
   }
 
   @GetMapping("/admin/history/users")

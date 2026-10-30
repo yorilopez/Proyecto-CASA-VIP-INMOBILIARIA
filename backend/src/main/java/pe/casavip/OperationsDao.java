@@ -79,7 +79,7 @@ public class OperationsDao {
   }
   public void notify(long id,String type) {
     var r=row("select l.codigo,m.codigo as manzana,p.nombre as proyecto from separacion s join lote l on l.id=s.lote_id join manzana m on m.id=l.manzana_id join etapa e on e.id=m.etapa_id join proyecto p on p.id=e.proyecto_id where s.id=?",id);
-    String title=switch(type){case "VENTA"->"Venta registrada";case "LIBERACION"->"Lote liberado";default->"Separación registrada";};
+    String title=switch(type){case "VENTA"->"Venta registrada";case "LIBERACION"->"Lote liberado";case "VENCIMIENTO"->"Separación vencida";default->"Separación registrada";};
     jdbc.update("insert into notificacion(operacion_id,tipo,titulo,mensaje) values(?,?,?,?)",id,type,title,r.get("proyecto")+" · Manzana "+r.get("manzana")+" · Lote "+r.get("codigo"));
   }
   public void created(long id, Actor actor) {capture(id);audit(actor,"OPERACION",id,"SEPARACION","Registro de separación",null,snapshot(id));notify(id,"SEPARACION");}

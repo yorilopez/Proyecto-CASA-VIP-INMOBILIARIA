@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'api.dart';
 import 'listing_filter.dart';
+import 'session_store.dart';
+import 'platform_io.dart' as platform;
 
 typedef Row = Map<String, dynamic>;
 
@@ -62,6 +64,7 @@ class CasaController extends ChangeNotifier {
         listingUrl('/admin/history', {
           'month': historyMonth,
           'entity': historyEntity,
+          'action': historyAction,
           'user': historyUser?.toString() ?? '',
         }),
       ),
@@ -74,7 +77,68 @@ class CasaController extends ChangeNotifier {
 
   num? agreedPrice, agreedInitial;
   int? agreedCount;
-  CasaController(this.api);
+  final SessionStore sessionStore;
+  CasaController(this.api, {SessionStore? sessionStore})
+    : sessionStore = sessionStore ?? SessionStore();
+  Row dashboard = {};
+  String dashboardMonth = businessMonth(),
+      dashboardSection = 'general',
+      historyAction = '';
+  int? dashboardUser, dashboardProject;
+  int _dashboardLoad = 0;
+  Future<void> loadDashboard() async {
+    final serial = ++_dashboardLoad;
+    final data = Row.from(
+      await api.call(
+        'GET',
+        listingUrl('/dashboard', {
+          'month': dashboardMonth,
+          'user': dashboardUser?.toString() ?? '',
+          'project': dashboardProject?.toString() ?? '',
+        }),
+      ),
+    );
+    if (serial == _dashboardLoad) {
+      dashboard = data;
+      notifyListeners();
+    }
+  }
+
+  Future<void> restoreSession() async {
+    if (!kIsWeb) {
+      final base = await platform.readSetting('server');
+      if (base != null && base.isNotEmpty) api.baseUrl = base;
+    }
+    final saved = await sessionStore.read();
+    if (saved == null) return;
+    final expires = DateTime.tryParse('${saved['expires']}');
+    if (saved['base'] != api.baseUrl ||
+        expires == null ||
+        !expires.isAfter(DateTime.now())) {
+      await sessionStore.clear();
+      return;
+    }
+    api.token = saved['token'] as String?;
+    try {
+      user = Row.from(await api.call('GET', '/auth/me'));
+      await refresh();
+      _startPolling();
+      go('home');
+    } catch (e) {
+      api.token = null;
+      user = null;
+      if (e is ApiException && e.status == 401) await sessionStore.clear();
+    }
+  }
+
+  void _startPolling() {
+    _notificationsTimer?.cancel();
+    _notificationsTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => pollNotifications(),
+    );
+  }
+
   String screen = 'login';
   Row? user,
       project,
@@ -96,19 +160,28 @@ class CasaController extends ChangeNotifier {
   bool get admin => user?['role'] == 'ADMINISTRADOR';
   static List<Row> rows(dynamic d) =>
       (d as List).map((x) => Map<String, dynamic>.from(x)).toList();
-  Future<void> login(String email, String password) async {
+  Future<void> login(
+    String email,
+    String password, {
+    bool remember = false,
+  }) async {
+    await sessionStore.clear();
     final data = await api.call('POST', '/auth/login', {
       'email': email,
       'password': password,
+      'remember': remember,
     });
     api.token = data['token'];
     user = Map<String, dynamic>.from(data['user']);
     await refresh();
-    _notificationsTimer?.cancel();
-    _notificationsTimer = Timer.periodic(
-      const Duration(seconds: 15),
-      (_) => pollNotifications(),
-    );
+    if (remember) {
+      await sessionStore.save(
+        api.baseUrl,
+        api.token!,
+        data['expires'] as String,
+      );
+    }
+    _startPolling();
     go('home');
   }
 
@@ -155,6 +228,14 @@ class CasaController extends ChangeNotifier {
   }
 
   void clear() {
+    unawaited(sessionStore.clear());
+    ++_dashboardLoad;
+    dashboard = {};
+    dashboardMonth = businessMonth();
+    dashboardSection = 'general';
+    dashboardUser = null;
+    dashboardProject = null;
+    historyAction = '';
     _notificationsTimer?.cancel();
     ++_clientLoad;
     ++_operationLoad;
@@ -270,12 +351,13 @@ class CasaController extends ChangeNotifier {
     go('client-form');
   }
 
-  Future<void> reserve(num amount, String observation) async {
+  Future<void> reserve(num amount, String observation, {int? days}) async {
     result = Map<String, dynamic>.from(
       await api.call('POST', '/reservations', {
         'lote_id': lot!['id'],
         'cliente_id': selectedClient!['id'],
         'monto': amount,
+        'plazo_dias': ?days,
         'observacion': observation,
         if (selectedPlan != null) 'plan_id': selectedPlan!['id'],
         if (coClient != null) 'cotitular_id': coClient!['id'],

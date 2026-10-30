@@ -38,3 +38,37 @@ Future<void> shareWhatsApp(Uint8List bytes, String name, String mime) async {
     'mime': mime,
   });
 }
+
+Future<String?> readSetting(String key) async {
+  try {
+    return await _channel.invokeMethod<String>('readSetting', {'key': key});
+  } on MissingPluginException {
+    return null;
+  }
+}
+
+Future<void> writeSetting(String key, String value) async {
+  try {
+    await _channel.invokeMethod<void>('writeSetting', {
+      'key': key,
+      'value': value,
+    });
+  } on MissingPluginException {
+    return;
+  }
+}
+
+Future<void> deleteSetting(String key) async {
+  try {
+    await _channel.invokeMethod<void>('deleteSetting', {'key': key});
+  } on MissingPluginException {
+    return;
+  }
+}
+
+Future<void> saveReport(Uint8List bytes, String name, String mime) =>
+    _channel.invokeMethod<void>('saveReport', {
+      'bytes': bytes,
+      'name': name,
+      'mime': mime,
+    });
