@@ -1,8 +1,0 @@
-flowchart TB
-  UI["CasaView y CasaController"] --> HTTP["ApiClient"]
-  HTTP --> AUTH["SecurityConfig y AuthService"]
-  AUTH --> API["ApiController"]
-  API --> S["Servicios de negocio"]
-  S --> DAO["CommercialDao"]
-  DAO --> JDBC["JdbcCommercialDao"]
-  JDBC --> PG["PostgreSQL"]

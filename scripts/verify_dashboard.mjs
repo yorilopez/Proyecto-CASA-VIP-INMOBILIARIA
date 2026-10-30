@@ -14,7 +14,7 @@ export async function verifyDashboard({page,root,click,enter,capture}) {
   await click('Clientes');await page.getByText(/Todos los clientes ·/).first().click();await capture('28_filtros_clientes');await click('Aplicar filtros');
   await click('Operaciones');await page.getByRole('button',{name:/Cliente Demo Uno/}).first().click();
   await page.getByRole('button',{name:'Modificar plazo',exact:true}).click();await capture('26_modificar_plazo');await enter('Días calendario','30');await click('Guardar');
-  await page.getByRole('button',{name:'Reasignar lote',exact:true}).click();await capture('29_reasignar');await click('Cancelar');
+  await page.getByRole('button',{name:'Reasignar lote',exact:true}).click();await capture('29_reasignar');await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'Liberar reserva',exact:true}).click();await capture('30_liberar');await enter('Motivo','Liberación de demostración 0.6.0');await click('Confirmar');
   await page.getByRole('button',{name:/^Mi cuenta/}).click();await page.getByRole('menuitem',{name:'Dashboard y reportes',exact:true}).click();
   await page.getByRole('button',{name:'Ver historial de cambios'}).click();
