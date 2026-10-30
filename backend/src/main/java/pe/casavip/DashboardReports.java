@@ -69,15 +69,41 @@ public class DashboardReports {
   }
 
   byte[] pdf(String heading,String context,List<Section> sections)throws IOException {
-    var lines=new ArrayList<String>();
-    for(var section:sections){lines.add("");lines.add(section.title().toUpperCase(Locale.ROOT)+" · "+section.rows().size()+" registros");if(section.rows().isEmpty())lines.add("Sin movimientos.");int n=0;for(var row:section.rows()){lines.add("");lines.add("Registro "+(++n));for(int i=0;i<section.fields().size();i++)wrap(section.labels().get(i)+": "+value(row.get(section.fields().get(i))),lines);}}
-    List<List<String>> pages=new ArrayList<>();for(int start=0;start<Math.max(1,lines.size());start+=42)pages.add(lines.subList(start,Math.min(lines.size(),start+42)));
+    var contextLines=new ArrayList<String>();wrap(context,contextLines);
+    int bodyTop=703-Math.max(0,contextLines.size()-1)*12;
+    int capacity=Math.min(42,(bodyTop-60)/15);
+    List<List<String>> pages=new ArrayList<>();
+    var current=new ArrayList<String>();
+    for(var section:sections){
+      String label=section.title().toUpperCase(Locale.ROOT)+" · "+section.rows().size()+" registros";
+      var records=new ArrayList<List<String>>();
+      if(section.rows().isEmpty())records.add(List.of("Sin movimientos."));
+      int n=0;
+      for(var row:section.rows()){
+        var block=new ArrayList<String>();block.add("");block.add("Registro "+(++n));
+        for(int i=0;i<section.fields().size();i++)wrap(section.labels().get(i)+": "+value(row.get(section.fields().get(i))),block);
+        records.add(block);
+      }
+      boolean first=true;
+      for(var block:records){
+        int heading=first?2:0;
+        if(!current.isEmpty() && current.size()+heading+block.size()>capacity){pages.add(current);current=new ArrayList<>();first=true;}
+        if(first){current.add("");current.add(label);first=false;}
+        int offset=0;
+        while(offset<block.size()){
+          int take=Math.min(capacity-current.size(),block.size()-offset);
+          current.addAll(block.subList(offset,offset+take));offset+=take;
+          if(offset<block.size()){pages.add(current);current=new ArrayList<>();current.add(label+" (continuación)");current.add("Registro "+n+" (continuación)");}
+        }
+      }
+    }
+    if(!current.isEmpty()||pages.isEmpty())pages.add(current);
     var objects=new ArrayList<byte[]>();objects.add(bytes("<< /Type /Catalog /Pages 2 0 R >>"));
     var kids=new StringBuilder();for(int i=0;i<pages.size();i++)kids.append(4+i*2).append(" 0 R ");objects.add(bytes("<< /Type /Pages /Kids ["+kids+"] /Count "+pages.size()+" >>"));objects.add(bytes("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"));
     for(int p=0;p<pages.size();p++){
       objects.add(bytes("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents "+(5+p*2)+" 0 R >>"));
       var stream=new StringBuilder("0.09 0.09 0.08 rg 0 748 595 94 re f\n0.83 0.67 0.28 rg\nBT /F1 20 Tf 40 804 Td (CASA VIP) Tj ET\n1 1 1 rg\nBT /F1 12 Tf 40 780 Td ("+escape(heading)+") Tj ET\n");
-      stream.append("0.3 0.3 0.3 rg\nBT /F1 9 Tf 40 727 Td (").append(escape(context)).append(") Tj ET\n0.1 0.1 0.1 rg\nBT /F1 10 Tf 40 703 Td 15 TL\n");
+      stream.append("0.3 0.3 0.3 rg\nBT /F1 9 Tf 40 727 Td 12 TL\n");for(String line:contextLines)stream.append('(').append(escape(line)).append(") Tj T*\n");stream.append("ET\n0.1 0.1 0.1 rg\nBT /F1 10 Tf 40 "+bodyTop+" Td 15 TL\n");
       for(String line:pages.get(p))stream.append('(').append(escape(line)).append(") Tj T*\n");
       stream.append("ET\nBT /F1 9 Tf 40 34 Td (Página ").append(p+1).append(" de ").append(pages.size()).append(") Tj ET\n");
       byte[] content=bytes(stream.toString());var out=new ByteArrayOutputStream();out.write(bytes("<< /Length "+content.length+" >>\nstream\n"));out.write(content);out.write(bytes("\nendstream"));objects.add(out.toByteArray());
