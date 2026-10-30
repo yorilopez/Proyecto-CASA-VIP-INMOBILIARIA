@@ -28,7 +28,7 @@ public class ReservationDeadlines {
 
   public void initialize(long id, BigDecimal amount, Integer requested) {
     int count = days(amount, requested);
-    d.execute("update separacion set plazo_dias=?,fecha_vencimiento=fecha_registro + (? * interval '1' day) where id=?", count, count, id);
+    d.execute("update separacion set plazo_dias=?,fecha_vencimiento=fecha_registro + (cast(? as integer) * interval '1' day) where id=?", count, count, id);
   }
 
   @Transactional
@@ -39,7 +39,7 @@ public class ReservationDeadlines {
     if (!"ACTIVA".equals(before.get("estado"))) throw new BusinessRules.Conflict("La separación ya no está activa.");
     if (((Number) before.get("version")).longValue() != version)
       throw new BusinessRules.Conflict("La operación cambió. Vuelve a abrirla.");
-    d.execute("update separacion set plazo_dias=?,fecha_vencimiento=fecha_registro + (? * interval '1' day),vencimiento_avisado=null,version=version+1 where id=?", days, days, id);
+    d.execute("update separacion set plazo_dias=?,fecha_vencimiento=fecha_registro + (cast(? as integer) * interval '1' day),vencimiento_avisado=null,version=version+1 where id=?", days, days, id);
     var after = d.row("select plazo_dias,fecha_vencimiento from separacion where id=?", id);
     d.audit(actor,"OPERACION",id,"PLAZO","Plazo de separación actualizado",
         Map.of("plazo_dias",Objects.toString(before.get("plazo_dias"),""),"fecha_vencimiento",Objects.toString(before.get("fecha_vencimiento"),"")),after);
