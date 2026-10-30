@@ -78,9 +78,9 @@ public class OperationsDao {
     jdbc.update("insert into operacion_documento(separacion_id,persona,lado,ruta_privada) select ?,c.nombre,d.lado,d.ruta_privada from cliente_documento d join cliente c on c.id=d.cliente_id join separacion s on s.id=? where (d.cliente_id=s.cliente_id or d.cliente_id=s.cotitular_id) and not exists(select 1 from operacion_documento od where od.separacion_id=? and od.ruta_privada=d.ruta_privada)",id,id,id);
   }
   public void notify(long id,String type) {
-    var r=row("select l.codigo,m.codigo as manzana,p.nombre as proyecto from separacion s join lote l on l.id=s.lote_id join manzana m on m.id=l.manzana_id join etapa e on e.id=m.etapa_id join proyecto p on p.id=e.proyecto_id where s.id=?",id);
+    var r=row("select l.codigo,m.codigo as manzana,p.nombre as proyecto,s.fecha_vencimiento from separacion s join lote l on l.id=s.lote_id join manzana m on m.id=l.manzana_id join etapa e on e.id=m.etapa_id join proyecto p on p.id=e.proyecto_id where s.id=?",id);
     String title=switch(type){case "VENTA"->"Venta registrada";case "LIBERACION"->"Lote liberado";case "VENCIMIENTO"->"Separación vencida";default->"Separación registrada";};
-    jdbc.update("insert into notificacion(operacion_id,tipo,titulo,mensaje) values(?,?,?,?)",id,type,title,r.get("proyecto")+" · Manzana "+r.get("manzana")+" · Lote "+r.get("codigo"));
+    jdbc.update("insert into notificacion(operacion_id,tipo,titulo,mensaje,vencimiento_referencia) values(?,?,?,?,?)",id,type,title,r.get("proyecto")+" · Manzana "+r.get("manzana")+" · Lote "+r.get("codigo"),"VENCIMIENTO".equals(type)?r.get("fecha_vencimiento"):null);
   }
   public void created(long id, Actor actor) {capture(id);audit(actor,"OPERACION",id,"SEPARACION","Registro de separación",null,snapshot(id));notify(id,"SEPARACION");}
   public void released(long id, Actor actor,String reason) {jdbc.update("update separacion set condiciones_activas=false,version=version+1 where id=?",id);audit(actor,"OPERACION",id,"LIBERACION",reason,null,row("select * from separacion where id=?",id));notify(id,"LIBERACION");}

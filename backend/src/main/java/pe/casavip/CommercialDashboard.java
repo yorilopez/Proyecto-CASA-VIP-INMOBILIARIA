@@ -12,7 +12,7 @@ public class CommercialDashboard {
   final CommercialQueries queries;
   public CommercialDashboard(OperationsDao d, CommercialQueries queries) { this.d=d;this.queries=queries; }
   static final ZoneId LIMA=ZoneId.of("America/Lima");
-  static final String BASE="select s.id,s.fecha_registro,s.fecha_vencimiento,s.plazo_dias,s.estado,s.cliente_id,s.cotitular_id,s.asesor_id,u.nombre as asesor,c.nombre as cliente,c.numero_documento as documento,c.telefono,co.nombre as cotitular,co.numero_documento as documento_cotitular,p.id as proyecto_id,p.nombre as proyecto,m.codigo as manzana,l.codigo as lote from separacion s join usuario u on u.id=s.asesor_id join cliente c on c.id=s.cliente_id left join cliente co on co.id=s.cotitular_id join lote l on l.id=s.lote_id join manzana m on m.id=l.manzana_id join etapa e on e.id=m.etapa_id join proyecto p on p.id=e.proyecto_id";
+  static final String BASE="select s.id,s.fecha_registro,s.fecha_vencimiento,s.plazo_dias,s.estado,s.cliente_id,s.cotitular_id,s.asesor_id,u.nombre as asesor,ar.nombre as rol_asesor,c.nombre as cliente,c.numero_documento as documento,c.telefono,co.nombre as cotitular,co.numero_documento as documento_cotitular,p.id as proyecto_id,p.nombre as proyecto,m.codigo as manzana,l.codigo as lote from separacion s join usuario u on u.id=s.asesor_id join rol ar on ar.id=u.rol_id join cliente c on c.id=s.cliente_id left join cliente co on co.id=s.cotitular_id join lote l on l.id=s.lote_id join manzana m on m.id=l.manzana_id join etapa e on e.id=m.etapa_id join proyecto p on p.id=e.proyecto_id";
 
   static String scope(String alias, Long advisor,Long project,List<Object> args) {
     String sql="";
@@ -53,14 +53,14 @@ public class CommercialDashboard {
     var byAdvisor=new LinkedHashMap<Long,Map<String,Object>>();
     for(var group:List.of(separations,sales))for(var op:group){
       long id=((Number)op.get("asesor_id")).longValue();
-      var entry=byAdvisor.computeIfAbsent(id,x->{var n=new LinkedHashMap<String,Object>();n.put("id",id);n.put("asesor",op.get("asesor"));n.put("separaciones",0);n.put("ventas",0);n.put("lotes_separados",new ArrayList<String>());n.put("lotes_vendidos",new ArrayList<String>());return n;});
+      var entry=byAdvisor.computeIfAbsent(id,x->{var n=new LinkedHashMap<String,Object>();n.put("id",id);n.put("asesor",op.get("asesor"));n.put("rol",op.get("rol_asesor"));n.put("separaciones",0);n.put("ventas",0);n.put("lotes_separados",new ArrayList<String>());n.put("lotes_vendidos",new ArrayList<String>());return n;});
       String key=group==separations?"separaciones":"ventas",lotKey=group==separations?"lotes_separados":"lotes_vendidos";
       entry.put(key,((Number)entry.get(key)).intValue()+1);
       ((List<String>)entry.get(lotKey)).add(op.get("proyecto")+" / Mz "+op.get("manzana")+" / Lote "+op.get("lote"));
     }
     var activity=new ArrayList<>(byAdvisor.values());
     activity.sort(Comparator.comparing(e->Objects.toString(e.get("asesor"))));
-    var ranking=new ArrayList<>(activity.stream().filter(e->((Number)e.get("ventas")).intValue()>0).toList());
+    var ranking=new ArrayList<>(activity.stream().filter(e->"ASESOR".equals(e.get("rol"))&&((Number)e.get("ventas")).intValue()>0).toList());
     ranking.sort(Comparator.<Map<String,Object>>comparingInt(e->((Number)e.get("ventas")).intValue()).reversed().thenComparing(e->Objects.toString(e.get("asesor"))));
     int position=0,last=-1,index=0;
     for(var entry:ranking){index++;int count=((Number)entry.get("ventas")).intValue();if(count!=last)position=index;last=count;entry.put("posicion",position);}
