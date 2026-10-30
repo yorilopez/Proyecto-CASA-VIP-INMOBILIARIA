@@ -1,0 +1,19 @@
+name: casa_vip
+description: Aplicacion comercial CASA VIP Avance 3
+publish_to: none
+version: 0.6.0+7
+environment:
+  sdk: ^3.11.0
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.6.0
+  web: ^1.1.1
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/casa-vip-logo.png

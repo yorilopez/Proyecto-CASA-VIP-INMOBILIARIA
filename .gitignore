@@ -1,0 +1,17 @@
+**/target/
+**/build/
+**/.dart_tool/
+**/.flutter-plugins-dependencies
+**/.gradle/
+**/local.properties
+**/data/
+**/private-files/
+**/*.log
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+
+backend/src/main/resources/static/
+**/key.properties

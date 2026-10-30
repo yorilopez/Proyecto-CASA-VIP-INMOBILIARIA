@@ -1,0 +1,9 @@
+{
+  "startup": true,
+  "integratedWeb": true,
+  "login": true,
+  "sessionPersistsAfterRestart": true,
+  "role": "ASESOR",
+  "database": "H2 file",
+  "passed": true
+}

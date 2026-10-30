@@ -1,0 +1,16 @@
+{
+  "lotes": [
+    {
+      "lote_id": 3,
+      "precio": 21000,
+      "area_m2": 124.42,
+      "ubicacion": "Interior",
+      "planes": [
+        {"inicial": 3000, "numero_cuotas": 12},
+        {"inicial": 3000, "numero_cuotas": 24},
+        {"inicial": 3000, "numero_cuotas": 36},
+        {"inicial": 3000, "numero_cuotas": 48}
+      ]
+    }
+  ]
+}
